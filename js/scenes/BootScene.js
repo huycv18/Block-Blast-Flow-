@@ -45,6 +45,7 @@ window.BootScene = class BootScene extends Phaser.Scene {
         this._generateBoosterBg();
         this._generateStarParticle();
         this._generateCoinIcon();
+        this._generateSettingsIcon();
     }
 
     // ----------------------------------------------------------
@@ -196,6 +197,7 @@ window.BootScene = class BootScene extends Phaser.Scene {
         gfx.fillPath();
 
         gfx.generateTexture('star_particle', size, size);
+        gfx.generateTexture('particle_star', size, size);
         gfx.destroy();
     }
 
@@ -221,6 +223,37 @@ window.BootScene = class BootScene extends Phaser.Scene {
         gfx.fillCircle(cx - 2, cy - 2, 2.5);
 
         gfx.generateTexture('coin_icon', size, size);
+        gfx.destroy();
+    }
+
+    // ----------------------------------------------------------
+    // Settings icon - 24x24 simple gear-like button glyph
+    // ----------------------------------------------------------
+    _generateSettingsIcon() {
+        const size = 24;
+        const cx = size / 2;
+        const cy = size / 2;
+        const gfx = this.make.graphics({ add: false });
+
+        gfx.lineStyle(3, THEME.HEADER_SUB, 1);
+        for (let i = 0; i < 8; i++) {
+            const angle = (i * Math.PI) / 4;
+            const x1 = cx + Math.cos(angle) * 7;
+            const y1 = cy + Math.sin(angle) * 7;
+            const x2 = cx + Math.cos(angle) * 10;
+            const y2 = cy + Math.sin(angle) * 10;
+            gfx.beginPath();
+            gfx.moveTo(x1, y1);
+            gfx.lineTo(x2, y2);
+            gfx.strokePath();
+        }
+
+        gfx.lineStyle(2.5, THEME.HEADER_SUB, 1);
+        gfx.strokeCircle(cx, cy, 7);
+        gfx.fillStyle(THEME.HEADER_SUB, 1);
+        gfx.fillCircle(cx, cy, 2.5);
+
+        gfx.generateTexture('settings_icon', size, size);
         gfx.destroy();
     }
 };

@@ -8,7 +8,7 @@ window.GameScene = class GameScene extends Phaser.Scene {
     }
 
     init(data) {
-        this.currentLevel = (data && data.levelIndex !== undefined) ? data.levelIndex : 0;
+        this.currentLevel = (data && data.levelIndex !== undefined) ? data.levelIndex : 1;  // Start at Level 2 for testing
     }
 
     create() {

@@ -85,6 +85,14 @@ window.Funnel = class Funnel {
     }
 
     addCube(cube) {
+        if (this.cubesInFunnel.includes(cube)) return;
+
+        if (cube.body) {
+            cube.sprite.setPosition(cube.body.position.x, cube.body.position.y);
+            this.scene.matter.world.remove(cube.body);
+            cube.body = null;
+        }
+
         cube.state = 'IN_FUNNEL';
         cube.stateTime = Date.now();
         this.cubesInFunnel.push(cube);
@@ -106,12 +114,6 @@ window.Funnel = class Funnel {
         if (conveyor.isFull()) return;
 
         const cube = this.cubesInFunnel.shift();
-
-        // Remove physics body
-        if (cube.body) {
-            this.scene.matter.world.remove(cube.body);
-            cube.body = null;
-        }
 
         cube.state = 'DRAINING';
 
@@ -146,26 +148,26 @@ window.Funnel = class Funnel {
 
             const pos = cube.body.position;
 
-            // Check if cube has reached funnel zone
-            if (pos.y > this.drainZoneY - 30) {
-                // Apply soft attract toward center
+            if (pos.y > this.drainZoneY - 60) {
                 const dx = this.drainZoneX - pos.x;
                 this.scene.matter.body.applyForce(cube.body, pos, {
-                    x: dx * 0.00005,
-                    y: 0
+                    x: dx * 0.00008,
+                    y: 0.00004
                 });
             }
 
-            // If cube is near drain and mostly stopped, transition to IN_FUNNEL
-            if (pos.y > this.drainZoneY &&
-                Math.abs(cube.body.velocity.y) < 1.5 &&
-                Math.abs(cube.body.velocity.x) < 1.5) {
-                this.addCube(cube);
-            }
+            const isInDrainMouth =
+                pos.y > this.drainZoneY + 4 &&
+                Math.abs(pos.x - this.drainZoneX) < CONFIG.FUNNEL_DRAIN_WIDTH;
+            const isSettledAtDrain =
+                pos.y > this.drainZoneY &&
+                Math.abs(cube.body.velocity.y) < 1.8 &&
+                Math.abs(cube.body.velocity.x) < 1.8;
+            const isTimedOut = now - cube.stateTime > 1800;
 
-            // Timeout: stuck cubes auto-transition after 3 seconds
-            if (cube.state === 'PHYSICS' && now - cube.stateTime > 3000) {
+            if (isInDrainMouth || isSettledAtDrain || isTimedOut) {
                 this.addCube(cube);
+                cube.sprite.setPosition(this.drainZoneX, CONFIG.CONTAINER_FUNNEL_BOTTOM - 8);
             }
         }
 

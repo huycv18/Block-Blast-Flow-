@@ -15,27 +15,38 @@ window.CarManager = class CarManager {
     }
 
     createCars(carsData) {
-        // Sort by column then queueOrder
-        const sorted = [...carsData].sort((a, b) => {
-            if (a.column !== b.column) return a.column - b.column;
-            return a.queueOrder - b.queueOrder;
+        const byColumn = this.columns.map(() => []);
+
+        carsData.forEach((carData, index) => {
+            const col = this.columns[carData.column];
+            if (!col) return;
+            byColumn[carData.column].push({ ...carData, _sourceIndex: index });
         });
 
-        for (const carData of sorted) {
-            const car = new Car(this.scene, carData);
-            const col = this.columns[carData.column];
-            if (!col) continue;
+        byColumn.forEach((columnCars, columnIndex) => {
+            columnCars.sort((a, b) => {
+                if (a.queueOrder !== b.queueOrder) return a.queueOrder - b.queueOrder;
+                return a._sourceIndex - b._sourceIndex;
+            });
 
-            if (carData.queueOrder === 0) {
-                col.active = car;
-                car.setActive(true);
-                car.setPosition(CONFIG.CAR_COL_POSITIONS[carData.column], CONFIG.CAR_ROW1_Y);
-            } else {
-                car.setActive(false);
-                car.setPosition(CONFIG.CAR_COL_POSITIONS[carData.column], CONFIG.CAR_ROW2_Y);
-                col.queue.push(car);
-            }
-        }
+            columnCars.forEach((carData, queueIndex) => {
+                const car = new Car(this.scene, carData);
+                const col = this.columns[columnIndex];
+                car.column = columnIndex;
+
+                if (queueIndex === 0) {
+                    col.active = car;
+                    car.setActive(true);
+                    car.setPosition(CONFIG.CAR_COL_POSITIONS[columnIndex], CONFIG.CAR_ROW1_Y);
+                    car.container.setVisible(true);
+                } else {
+                    col.queue.push(car);
+                    car.setActive(false);
+                    car.setPosition(CONFIG.CAR_COL_POSITIONS[columnIndex], CONFIG.CAR_ROW2_Y);
+                    car.container.setVisible(queueIndex === 1);
+                }
+            });
+        });
     }
 
     getActiveCars() {
@@ -83,6 +94,7 @@ window.CarManager = class CarManager {
             const nextCar = col.queue.shift();
             col.active = nextCar;
             const targetX = CONFIG.CAR_COL_POSITIONS[colIdx];
+            nextCar.container.setVisible(true);
             await nextCar.slideForward(targetX, CONFIG.CAR_ROW1_Y);
 
             // Show next queue car at row2 if exists

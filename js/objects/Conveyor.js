@@ -19,12 +19,11 @@ window.Conveyor = class Conveyor {
         this.hh = CONFIG.CONVEYOR_HEIGHT / 2;  // half height
         this.cr = CONFIG.CONVEYOR_CORNER_R;
 
-        // Stations (bottom half, aligned with car columns)
-        this.stations = [
-            { t: 0.55, column: 0 },
-            { t: 0.625, column: 1 },
-            { t: 0.70, column: 2 },
-        ];
+        // Stations on the bottom belt, aligned directly above each car column.
+        this.stations = CONFIG.CAR_COL_POSITIONS.map((x, column) => ({
+            t: this.getBottomPathTForX(x),
+            column,
+        }));
 
         this.drawTrack();
     }
@@ -77,6 +76,40 @@ window.Conveyor = class Conveyor {
         }
     }
 
+    getPathMetrics() {
+        const straightW = this.hw - this.cr;
+        const r = this.cr;
+        const innerOffset = 10;
+
+        const totalPerimeter = 2 * straightW * 2 + 2 * Math.PI * (r - innerOffset / 2);
+        const topLen = straightW * 2;
+        const rightArc = Math.PI * (r - innerOffset / 2);
+        const botLen = straightW * 2;
+        const leftArc = Math.PI * (r - innerOffset / 2);
+
+        return {
+            straightW,
+            r,
+            innerOffset,
+            topFrac: topLen / totalPerimeter,
+            rightFrac: rightArc / totalPerimeter,
+            botFrac: botLen / totalPerimeter,
+            leftFrac: leftArc / totalPerimeter,
+        };
+    }
+
+    getBottomPathTForX(x) {
+        const metrics = this.getPathMetrics();
+        const rightX = this.cx + metrics.straightW;
+        const bottomFrac = Phaser.Math.Clamp(
+            (rightX - x) / (metrics.straightW * 2),
+            0,
+            1
+        );
+
+        return metrics.topFrac + metrics.rightFrac + bottomFrac * metrics.botFrac;
+    }
+
     /**
      * Convert t (0-1) to screen position on the oval path.
      * Path: stadium shape going clockwise from top-center.
@@ -96,20 +129,15 @@ window.Conveyor = class Conveyor {
 
         const cx = this.cx;
         const cy = this.cy;
-        const straightW = this.hw - this.cr; // Straight section half-width
-        const r = this.cr;
-        const innerOffset = 10; // Distance from track edge to cube path
-
-        const totalPerimeter = 2 * straightW * 2 + 2 * Math.PI * (r - innerOffset / 2);
-        const topLen = straightW * 2;
-        const rightArc = Math.PI * (r - innerOffset / 2);
-        const botLen = straightW * 2;
-        const leftArc = Math.PI * (r - innerOffset / 2);
-
-        const topFrac = topLen / totalPerimeter;
-        const rightFrac = rightArc / totalPerimeter;
-        const botFrac = botLen / totalPerimeter;
-        const leftFrac = leftArc / totalPerimeter;
+        const {
+            straightW,
+            r,
+            innerOffset,
+            topFrac,
+            rightFrac,
+            botFrac,
+            leftFrac,
+        } = this.getPathMetrics();
 
         let x, y;
 
@@ -177,15 +205,16 @@ window.Conveyor = class Conveyor {
 
             // Check stations
             for (const station of this.stations) {
-                // Check if cube just passed this station
-                const crossedForward = (oldT < station.t && entry.pathT >= station.t);
-                const crossedWrap = (oldT > station.t && entry.pathT < station.t); // Handle path wrap
+                // Proper crossing detection accounting for path wraparound
+                // Calculate distance to station and distance traveled
+                const toStation = station.t > oldT ? station.t - oldT : 1 - oldT + station.t;
+                const traveled = entry.pathT > oldT ? entry.pathT - oldT : 1 - oldT + entry.pathT;
+                const crossed = traveled >= toStation && toStation > 0;
 
-                if (crossedForward || crossedWrap) {
+                if (crossed) {
                     const car = carManager.findMatchingActiveCar(entry.color, station.column);
                     if (car && car.canAccept(entry.color)) {
                         this.matchCubeWithCar(entry, car);
-                        this.removeCube(entry); // Already removed in matchCubeWithCar, but ensure clean
                         break;
                     }
                 }
