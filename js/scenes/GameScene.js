@@ -75,6 +75,8 @@ window.GameScene = class GameScene extends Phaser.Scene {
     }
 
     async handleBlockTap(block) {
+        if (block.isResolving) return;
+
         // Handle booster targeting
         if (this.boosterManager.isTargeting()) {
             const booster = this.boosterManager.getActiveBooster();
@@ -96,6 +98,7 @@ window.GameScene = class GameScene extends Phaser.Scene {
         }
 
         if (block.state === 'pullable') {
+            block.isResolving = true;
             this.gameState.setState('ANIMATING');
 
             // Animation chain: shake → lift → blast → cubes spawn
@@ -103,26 +106,22 @@ window.GameScene = class GameScene extends Phaser.Scene {
             await block.liftUp();
 
             // Spawn cubes before blast completes for visual overlap
-            const cubes = this.cubeManager.spawnFromBlock(block);
+            this.cubeManager.spawnFromBlock(block);
 
-            await block.blast();
             this.board.removeBlock(block);
+            block.blast();
 
             // Camera micro-shake
             this.cameras.main.shake(80, 0.005);
 
-            // Wait for cubes to settle then unlock input
-            this.time.delayedCall(1000, () => {
-                if (this.gameState.getState() !== 'WIN' &&
-                    this.gameState.getState() !== 'LOSE') {
+            if (this.gameState.getState() !== 'WIN' &&
+                this.gameState.getState() !== 'LOSE') {
+                if (this.board.isEmpty()) {
+                    this.gameState.enterCleanup(this.conveyor);
+                } else {
                     this.gameState.setState('PLAYING');
                 }
-
-                // Check win/lose
-                this.gameState.checkWinCondition(
-                    this.board, this.conveyor, this.funnel
-                );
-            });
+            }
         }
     }
 

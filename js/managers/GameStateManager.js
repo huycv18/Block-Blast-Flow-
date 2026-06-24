@@ -13,7 +13,7 @@ window.GameStateManager = class GameStateManager {
         const validTransitions = {
             'IDLE':      ['PLAYING'],
             'PLAYING':   ['ANIMATING', 'CLEANUP', 'LOSE'],
-            'ANIMATING': ['PLAYING'],
+            'ANIMATING': ['PLAYING', 'CLEANUP'],
             'CLEANUP':   ['WIN'],
             'WIN':       ['IDLE'],
             'LOSE':      ['PLAYING', 'IDLE'], // PLAYING via revive, IDLE via retry

@@ -34,7 +34,7 @@ window.CONFIG = {
     CONVEYOR_HEIGHT: 40,
     CONVEYOR_CORNER_R: 20,
     CONVEYOR_CAPACITY: 40,
-    CONVEYOR_SPEED: 0.15,
+    CONVEYOR_SPEED: 0.2,
     CLEANUP_SPEED_MULT: 2,
 
     // --- Warning ---
