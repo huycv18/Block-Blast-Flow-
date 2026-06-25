@@ -110,6 +110,24 @@ window.Conveyor = class Conveyor {
         return metrics.topFrac + metrics.rightFrac + bottomFrac * metrics.botFrac;
     }
 
+    getTopPathTForX(x) {
+    const metrics = this.getPathMetrics();
+    const leftX = this.cx - metrics.straightW;
+    const topFrac = Phaser.Math.Clamp(
+        (x - leftX) / (metrics.straightW * 2),
+        0,
+        1
+    );
+
+    return topFrac * metrics.topFrac;
+}
+
+    /** Returns the t value for the center of the top edge (entry point from Funnel). */
+    getEntryT() {
+        const { topFrac } = this.getPathMetrics();
+        return topFrac / 2;
+    }
+
     /**
      * Convert t (0-1) to screen position on the oval path.
      * Path: stadium shape going clockwise from top-center.
@@ -171,12 +189,13 @@ window.Conveyor = class Conveyor {
     addCube(cube) {
         cube.state = 'ON_CONVEYOR';
         cube.stateTime = Date.now();
-        const entry = this.getPathPosition(0);
+        const entryT = this.getEntryT();
+        const entry = this.getPathPosition(entryT);
         cube.sprite.setPosition(entry.x, entry.y);
 
         this.cubesOnBelt.push({
             cube: cube,
-            pathT: 0,
+            pathT: entryT,
             color: cube.color,
         });
     }

@@ -62,7 +62,7 @@ window.CONFIG = {
 
     // --- Funnel ---
     FUNNEL_CAPACITY: 40,
-    DRAIN_INTERVAL: 40,
+    DRAIN_INTERVAL: 120,
 
     // --- Physics ---
     GRAVITY_Y: 2,

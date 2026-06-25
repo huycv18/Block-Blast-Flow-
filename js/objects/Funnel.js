@@ -317,7 +317,8 @@ window.Funnel = class Funnel {
 
         this.arrangeQueuedCubes(true);
 
-        const entryPos = conveyor.getPathPosition(0);
+        const entryT = conveyor.getEntryT();
+        const entryPos = conveyor.getPathPosition(entryT);
 
         this.scene.tweens.killTweensOf(cube.sprite);
 
