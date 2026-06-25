@@ -123,7 +123,18 @@ window.CarManager = class CarManager {
             nextCar.container.setAlpha(1);
             nextCar.setActive(true);
 
-            await nextCar.slideForward(targetX, CONFIG.CAR_ROW1_Y);
+            // Reveal hidden car before/during slide into active row
+            if (nextCar.hidden && !nextCar.isRevealed) {
+                // Start reveal mid-slide for a dramatic effect
+                const slidePromise = nextCar.slideForward(targetX, CONFIG.CAR_ROW1_Y);
+                // Trigger reveal partway through the slide
+                this.scene.time.delayedCall(CONFIG.CAR_ADVANCE_DURATION * 0.45, () => {
+                    nextCar.reveal();
+                });
+                await slidePromise;
+            } else {
+                await nextCar.slideForward(targetX, CONFIG.CAR_ROW1_Y);
+            }
 
             if (col.queue.length > 0) {
                 const peekCar = col.queue[0];
@@ -343,6 +354,11 @@ window.CarManager = class CarManager {
                 car.container.setAlpha(1);
                 car.container.setScale(1);
                 car.container.setDepth(20);
+
+                // Reveal hidden car that has been shuffled/advanced to active slot
+                if (car.hidden && !car.isRevealed) {
+                    car.reveal();
+                }
             }
 
             for (let queueIndex = 0; queueIndex < col.queue.length; queueIndex++) {
@@ -648,6 +664,11 @@ window.CarManager = class CarManager {
             car.container.setAlpha(CONFIG.CAR_ROW2_ALPHA || 0.72);
             car.container.setScale(CONFIG.CAR_ROW2_SCALE || 0.82);
             car.container.setDepth(22);
+
+            // Reveal hidden car immediately when Paint Gun is going to fill it
+            if (car.hidden && !car.isRevealed) {
+                car.reveal();
+            }
         }
     }
 

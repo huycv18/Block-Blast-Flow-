@@ -615,7 +615,7 @@
                     const car = carsInCol[i];
                     const carIndex = this.levelData.cars.indexOf(car);
                     const item = document.createElement('div');
-                    item.className = 'car-item';
+                    item.className = 'car-item' + (car.hidden ? ' is-hidden' : '');
                     item.draggable = true;
                     item.dataset.carIndex = carIndex;
                     item.title = 'Drag to reorder this car';
@@ -635,9 +635,17 @@
                     handle.textContent = '☰';
                     item.appendChild(handle);
 
+                    // Color dot (with ? overlay when hidden)
                     const dot = document.createElement('div');
-                    dot.className = 'car-color-dot';
+                    dot.className = 'car-color-dot' + (car.hidden ? ' mystery' : '');
                     dot.style.background = hexToCSS(COLORS[car.color]?.hex || 0x888888);
+                    if (car.hidden) {
+                        dot.title = 'Hidden Car — revealed when active';
+                        const qMark = document.createElement('span');
+                        qMark.className = 'car-mystery-q';
+                        qMark.textContent = '?';
+                        dot.appendChild(qMark);
+                    }
                     item.appendChild(dot);
 
                     // Color select
@@ -669,6 +677,23 @@
                     });
                     capInput.addEventListener('mousedown', (e) => e.stopPropagation());
                     item.appendChild(capInput);
+
+                    // Hidden checkbox
+                    const hiddenLabel = document.createElement('label');
+                    hiddenLabel.className = 'car-hidden-label';
+                    hiddenLabel.title = 'Mystery Car: shows "?" in queue, reveals when active';
+                    const hiddenCheck = document.createElement('input');
+                    hiddenCheck.type = 'checkbox';
+                    hiddenCheck.checked = !!car.hidden;
+                    hiddenCheck.addEventListener('change', () => {
+                        car.hidden = hiddenCheck.checked;
+                        this.renderCarsConfig();
+                        this.renderValidation();
+                    });
+                    hiddenCheck.addEventListener('mousedown', (e) => e.stopPropagation());
+                    hiddenLabel.appendChild(hiddenCheck);
+                    hiddenLabel.appendChild(document.createTextNode('🎭'));
+                    item.appendChild(hiddenLabel);
 
                     // Queue label
                     const qLabel = document.createElement('span');
@@ -1312,6 +1337,13 @@
                 }
             }
             this.blockIdCounter = maxId + 1;
+
+            // Normalise hidden flag on cars (may be missing on old levels)
+            for (const car of this.levelData.cars) {
+                if (car.hidden !== true) {
+                    delete car.hidden;
+                }
+            }
 
             this.syncSettingsToUI();
             this.buildColorGrid();
