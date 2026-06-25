@@ -104,7 +104,7 @@ html, body {
 }
 
 #right-panel {
-    width: 320px;
+    width: 400px;
     border-right: none;
     border-left: 1px solid var(--border);
 }
