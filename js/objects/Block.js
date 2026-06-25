@@ -377,12 +377,14 @@ window.Block = class Block {
 
     getLayerOverlayAlpha() {
         const C = window.CONFIG;
+        const overlays = C.LAYER_OVERLAYS || [];
 
         const depth = typeof this.visualLayerDepth === 'number'
             ? this.visualLayerDepth
             : 0;
+        const index = Phaser.Math.Clamp(Math.floor(depth), 0, Math.max(0, overlays.length - 1));
 
-        return C.LAYER_OVERLAYS[depth] || 0;
+        return overlays[index] || 0;
     }
 
     getBlockedOverlayAlpha() {
@@ -390,6 +392,19 @@ window.Block = class Block {
 
         // Giảm số này nếu Block bị blocked vẫn quá tối.
         return Math.max(layerDim, 0.16);
+    }
+
+    resetTransientVisualFlags() {
+        this._xRay = false;
+        this._xRayHeld = false;
+        this._xRayPeek = false;
+        this._xRayRevealedCovered = false;
+        this._xRayPeekWasCovered = false;
+    }
+
+    restoreVisualState() {
+        this.resetTransientVisualFlags();
+        this.setState(this.state, true);
     }
 
     // ----------------------------------------------------------
@@ -776,6 +791,8 @@ window.Block = class Block {
     // ----------------------------------------------------------
 
     destroy() {
+        this.resetTransientVisualFlags();
+
         if (this.container) {
             this.container.removeInteractive();
             this.container.destroy();

@@ -271,146 +271,124 @@ window.Board = class Board {
         for (const [id, block] of this.blocks) {
             const newState = stateMap.get(block);
 
+            block.resetTransientVisualFlags();
+
             // force = true để overlay được refresh kể cả khi state không đổi.
             block.setState(newState, true);
         }
     }
 
-    /**
-     * X-Ray mode:
-     *  ON  → top layer invisible; depth-1 layer clearly visible; deeper layers increasingly dim.
-     *  OFF → restore every block to its actual state visuals.
-     */
-    setXRayMode(isOn) {
-        // Identify the actual top layer index (highest layer with any visible block)
+    getTopVisibleLayerIndex() {
         let topLayerIdx = -1;
+
         for (const [, block] of this.blocks) {
             if (block.state !== 'covered' && block.layer > topLayerIdx) {
                 topLayerIdx = block.layer;
             }
         }
-        if (topLayerIdx < 0) return;
 
+        return topLayerIdx;
+    }
+
+    resetLayerPreview() {
         for (const [, block] of this.blocks) {
-            if (!block.container) continue;
-            block._xRay = isOn;
+            if (!block?.container) continue;
+            block.restoreVisualState();
+        }
+    }
 
-            if (block.layer === topLayerIdx) {
-                // ── Top layer (depth 0): fully invisible ──────────────────────
-                block.container.setAlpha(isOn ? (CONFIG.XRAY_TOP_ALPHA ?? 0) : 1);
+    applyLayerPeekVisual(block, depth, coveredFlagName) {
+        if (!block?.container) return;
 
+        const safeDepth = Math.max(1, depth);
+        const containerAlpha = safeDepth === 1 ? 0.95 : safeDepth === 2 ? 0.35 : 0.15;
+        const overlayAlpha = safeDepth === 1
+            ? (CONFIG.XRAY_LOWER_OVERLAY ?? 0.02)
+            : Math.min(0.55, 0.18 * (safeDepth - 1));
+
+        block[coveredFlagName] = (block.state === 'covered');
+        block.container.setVisible(true);
+        block.container.setAlpha(containerAlpha);
+        block.container.setDepth(block.getBaseDepth());
+
+        for (const sprite of block.cellSprites) {
+            if (safeDepth === 1) {
+                sprite.clearTint();
+                sprite.setAlpha(1);
             } else {
-                // ── Sub-layers: brightness falls off with depth ───────────────
-                if (isOn) {
-                    // How many layers below the top is this block?
-                    const depth = topLayerIdx - block.layer; // 1 = directly below, 2 = two below …
-
-                    // depth=1 → alpha 0.95, depth=2 → 0.35, depth=3+ → 0.15
-                    const containerAlpha = depth === 1 ? 0.95
-                                         : depth === 2 ? 0.35
-                                         : 0.15;
-
-                    // depth=1 → overlay nearly gone, depth=2+ → keeps a noticeable dim
-                    const overlayAlpha = depth === 1
-                        ? (CONFIG.XRAY_LOWER_OVERLAY ?? 0.02)
-                        : Math.min(0.55, 0.18 * (depth - 1));
-
-                    block._xRayRevealedCovered = (block.state === 'covered');
-                    block.container.setVisible(true);
-                    block.container.setAlpha(containerAlpha);
-
-                    // Remove tint only on depth-1 (the one we're really looking at)
-                    for (const sp of block.cellSprites) {
-                        if (depth === 1) { sp.clearTint(); sp.setAlpha(1); }
-                        else             { sp.setAlpha(containerAlpha); }
-                    }
-                    for (const gl of block.glowSprites)   { gl.setAlpha(depth === 1 ? 0.12 : 0); }
-                    for (const ov of block.overlaySprites) { ov.setAlpha(overlayAlpha); }
-
-                    block.updateConnectorOverlay(overlayAlpha);
-                    if (block.connectorGraphics) block.connectorGraphics.setAlpha(containerAlpha);
-                    if (block.shadowGraphics)    block.shadowGraphics.setAlpha(depth === 1 ? 1 : 0);
-
-                } else {
-                    // Restore
-                    if (block._xRayRevealedCovered) {
-                        block.container.setVisible(false);
-                        block._xRayRevealedCovered = false;
-                    } else {
-                        block.setState(block.state, true);
-                    }
-                }
+                sprite.setAlpha(containerAlpha);
             }
+        }
+
+        for (const glow of block.glowSprites) {
+            glow.setAlpha(safeDepth === 1 ? 0.12 : 0);
+        }
+
+        for (const overlay of block.overlaySprites) {
+            overlay.setAlpha(overlayAlpha);
+        }
+
+        block.updateConnectorOverlay(overlayAlpha);
+
+        if (block.connectorGraphics) {
+            block.connectorGraphics.setAlpha(containerAlpha);
+        }
+
+        if (block.shadowGraphics) {
+            block.shadowGraphics.setAlpha(safeDepth === 1 ? 1 : 0);
         }
     }
 
     /**
-     * X-Ray peek for a specific block (activated by long-hold).
-     * ON : fades the held block; reveals sub-layer blocks that share at least one cell.
-     * OFF: restores everything.
+     * X-Ray mode:
+     * ON fades the current top layer; lower layers become readable by depth.
+     * OFF restores every block through the normal state renderer.
+     */
+    setXRayMode(isOn) {
+        this.resetLayerPreview();
+        if (!isOn) return;
+
+        const topLayerIdx = this.getTopVisibleLayerIndex();
+        if (topLayerIdx < 0) return;
+
+        for (const [, block] of this.blocks) {
+            if (!block.container || block.layer > topLayerIdx) continue;
+
+            if (block.layer === topLayerIdx) {
+                block._xRay = true;
+                block.container.setVisible(true);
+                block.container.setAlpha(CONFIG.XRAY_TOP_ALPHA ?? 0);
+                block.container.setDepth(block.getBaseDepth());
+                continue;
+            }
+
+            this.applyLayerPeekVisual(block, topLayerIdx - block.layer, '_xRayRevealedCovered');
+        }
+    }
+
+    /**
+     * X-Ray peek for one held block.
+     * Only lower blocks sharing at least one cell are revealed.
      */
     setXRayModeForBlock(heldBlock, isOn) {
-        if (!heldBlock?.container) return;
+        this.resetLayerPreview();
 
-        const xrayOverlay = CONFIG.XRAY_LOWER_OVERLAY ?? 0.02;
+        if (!isOn || !heldBlock?.container) return;
 
-        if (isOn) {
-            // Fade the held block to invisible
-            heldBlock._xRayHeld = true;
-            heldBlock.container.setAlpha(0);
+        heldBlock._xRayHeld = true;
+        heldBlock.container.setVisible(true);
+        heldBlock.container.setAlpha(CONFIG.XRAY_TOP_ALPHA ?? 0);
+        heldBlock.container.setDepth(heldBlock.getBaseDepth());
 
-            // Build set of cells this block occupies
-            const cellKeys = new Set(heldBlock.cells.map(c => `${c.row},${c.col}`));
+        const cellKeys = new Set(heldBlock.cells.map(cell => `${cell.row},${cell.col}`));
 
-            for (const [, other] of this.blocks) {
-                if (other === heldBlock || !other.container) continue;
-                if (other.layer >= heldBlock.layer) continue; // only look below
+        for (const [, other] of this.blocks) {
+            if (other === heldBlock || !other.container) continue;
+            if (other.layer >= heldBlock.layer) continue;
+            if (!other.cells.some(cell => cellKeys.has(`${cell.row},${cell.col}`))) continue;
 
-                // Only blocks that share at least one cell
-                const sharesCell = other.cells.some(c => cellKeys.has(`${c.row},${c.col}`));
-                if (!sharesCell) continue;
-
-                const depth = heldBlock.layer - other.layer; // 1 = directly below
-                const containerAlpha = depth === 1 ? 0.95 : depth === 2 ? 0.35 : 0.15;
-                const overlayAlpha   = depth === 1 ? xrayOverlay : Math.min(0.55, 0.18 * (depth - 1));
-
-                other._xRayPeek = true;
-                other._xRayPeekWasCovered = (other.state === 'covered');
-                other.container.setVisible(true);
-                other.container.setAlpha(containerAlpha);
-
-                if (depth === 1) {
-                    for (const sp of other.cellSprites) { sp.clearTint(); sp.setAlpha(1); }
-                    for (const gl of other.glowSprites)  { gl.setAlpha(0.12); }
-                } else {
-                    for (const sp of other.cellSprites)  { sp.setAlpha(containerAlpha); }
-                    for (const gl of other.glowSprites)  { gl.setAlpha(0); }
-                }
-                for (const ov of other.overlaySprites)   { ov.setAlpha(overlayAlpha); }
-                other.updateConnectorOverlay(overlayAlpha);
-                if (other.connectorGraphics) other.connectorGraphics.setAlpha(containerAlpha);
-                if (other.shadowGraphics)    other.shadowGraphics.setAlpha(depth === 1 ? 1 : 0);
-            }
-
-        } else {
-            // Restore held block
-            if (heldBlock._xRayHeld) {
-                heldBlock._xRayHeld = false;
-                heldBlock.container.setAlpha(1);
-            }
-
-            // Restore all peeked sub-layer blocks
-            for (const [, other] of this.blocks) {
-                if (!other._xRayPeek) continue;
-                other._xRayPeek = false;
-
-                if (other._xRayPeekWasCovered) {
-                    other.container.setVisible(false);
-                    other._xRayPeekWasCovered = false;
-                } else {
-                    other.setState(other.state, true);
-                }
-            }
+            other._xRayPeek = true;
+            this.applyLayerPeekVisual(other, heldBlock.layer - other.layer, '_xRayPeekWasCovered');
         }
     }
 

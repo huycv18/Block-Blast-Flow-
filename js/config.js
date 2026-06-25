@@ -1,5 +1,5 @@
 // ============================================================
-// Block Cube Puzzle — Game Configuration
+// Block Blast Flow! — Game Configuration
 // Global namespace: window.CONFIG, window.COLORS, window.THEME
 // ============================================================
 
@@ -59,7 +59,7 @@ window.CONFIG = {
 
     // --- Cubes ---
     CUBE_SIZE: 10,
-    CUBES_PER_CELL: 4,
+    CUBES_PER_CELL: 8,
     CUBE_POOL_SIZE: 200,
 
     // --- Funnel ---

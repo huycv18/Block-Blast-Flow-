@@ -1,5 +1,5 @@
 /* ============================================================
-   Block Cube Puzzle — Level Editor Styles
+   Block Blast Flow! — Level Editor Styles
    Premium dark theme matching game aesthetic
    ============================================================ */
 
@@ -100,7 +100,7 @@ html, body {
 .panel::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
 
 #left-panel {
-    width: 260px;
+    width: 400px;
 }
 
 #right-panel {
@@ -307,6 +307,33 @@ html, body {
 .layer-item.active {
     background: rgba(74, 123, 217, 0.15);
     border-color: var(--accent);
+}
+
+.layer-item.hidden {
+    opacity: 0.5;
+}
+
+.layer-item.hidden .layer-badge {
+    background: var(--border-light);
+}
+
+.layer-visibility {
+    width: 34px;
+    height: 22px;
+    border: 1px solid var(--border-light);
+    border-radius: 4px;
+    background: var(--bg-input);
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.layer-visibility:hover {
+    color: var(--text);
+    border-color: var(--accent-light);
 }
 
 .layer-item .layer-badge {

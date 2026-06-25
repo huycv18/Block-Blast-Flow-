@@ -1,5 +1,5 @@
 // ============================================================
-// Block Cube Puzzle — Level Editor
+// Block Blast Flow! — Level Editor
 // Pure vanilla JS, no dependencies beyond config/shapes/validator
 // ============================================================
 
@@ -12,6 +12,8 @@
     const GRID_ROWS = CONFIG.GRID_ROWS;  // Read from game config
     const CANVAS_W = GRID_COLS * CELL_PX + GRID_PAD * 2;
     const CANVAS_H = GRID_ROWS * CELL_PX + GRID_PAD * 2;
+    const CUBES_PER_CELL = CONFIG.CUBES_PER_CELL || 8;
+    const DEFAULT_CAR_CAPACITY = 16;
 
     // ─── Color helpers ───
     function hexToCSS(hex) {
@@ -36,6 +38,7 @@
             this.hoverCell = null;
             this.blockIdCounter = 1;
             this.selectedBlockId = null;
+            this.hiddenLayers = new Set();
 
             // Level data
             this.levelData = this.createNewLevel();
@@ -66,9 +69,9 @@
                 funnelCapacity: 40,
                 layers: [{ index: 0, blocks: [] }],
                 cars: [
-                    { column: 0, color: 'red', capacity: 8, queueOrder: 0 },
-                    { column: 1, color: 'blue', capacity: 8, queueOrder: 0 },
-                    { column: 2, color: 'green', capacity: 8, queueOrder: 0 },
+                    { column: 0, color: 'red', capacity: DEFAULT_CAR_CAPACITY, queueOrder: 0 },
+                    { column: 1, color: 'blue', capacity: DEFAULT_CAR_CAPACITY, queueOrder: 0 },
+                    { column: 2, color: 'green', capacity: DEFAULT_CAR_CAPACITY, queueOrder: 0 },
                 ],
                 boosters: { magnet: 10, shuffle: 10, paintGun: 10 },
             };
@@ -76,6 +79,21 @@
 
         getActiveLayerData() {
             return this.levelData.layers.find(l => l.index === this.activeLayer);
+        }
+
+        isLayerVisible(layerIndex) {
+            return !this.hiddenLayers.has(layerIndex);
+        }
+
+        toggleLayerVisibility(layerIndex) {
+            if (this.hiddenLayers.has(layerIndex)) {
+                this.hiddenLayers.delete(layerIndex);
+            } else {
+                this.hiddenLayers.add(layerIndex);
+            }
+
+            this.renderLayers();
+            this.renderGrid();
         }
 
         getAllBlocks() {
@@ -91,7 +109,7 @@
         getBlockCubeCount(block) {
             const shape = SHAPES[block.shape];
             if (!shape) return 0;
-            return shape.unitCount * (CONFIG.CUBES_PER_CELL || 4);
+            return shape.unitCount * CUBES_PER_CELL;
         }
 
         getHighestNonEmptyLayer() {
@@ -236,13 +254,12 @@
                 if (!ok) return;
             }
 
-            const defaultCapacity = 8;
             const generated = [];
 
             for (const item of priority) {
                 let remaining = item.totalCubes;
                 while (remaining > 0) {
-                    const capacity = Math.min(defaultCapacity, remaining);
+                    const capacity = Math.min(DEFAULT_CAR_CAPACITY, remaining);
                     const index = generated.length;
                     generated.push({
                         column: index % 3,
@@ -286,6 +303,8 @@
 
         findBlockAtAnyLayer(row, col) {
             for (const layer of this.levelData.layers) {
+                if (!this.isLayerVisible(layer.index)) continue;
+
                 for (const block of layer.blocks) {
                     const cells = this.getBlockCells(block);
                     if (cells.some(c => c.row === row && c.col === col)) {
@@ -424,9 +443,15 @@
             container.innerHTML = '';
             const sorted = [...this.levelData.layers].sort((a, b) => b.index - a.index);
             for (const layer of sorted) {
+                const visible = this.isLayerVisible(layer.index);
                 const el = document.createElement('div');
-                el.className = 'layer-item' + (layer.index === this.activeLayer ? ' active' : '');
+                el.className = [
+                    'layer-item',
+                    layer.index === this.activeLayer ? 'active' : '',
+                    visible ? '' : 'hidden',
+                ].filter(Boolean).join(' ');
                 el.innerHTML = `
+                    <button class="layer-visibility" data-layer="${layer.index}" title="${visible ? 'Hide layer' : 'Show layer'}">${visible ? 'ON' : 'OFF'}</button>
                     <span class="layer-badge">L${layer.index}</span>
                     <span class="layer-info">${layer.blocks.length} blocks</span>
                     ${this.levelData.layers.length > 1
@@ -434,9 +459,16 @@
                         : ''}
                 `;
                 el.addEventListener('click', (e) => {
+                    if (e.target.closest('.layer-visibility')) {
+                        const idx = parseInt(e.target.closest('.layer-visibility').dataset.layer);
+                        this.toggleLayerVisibility(idx);
+                        return;
+                    }
+
                     if (e.target.classList.contains('layer-delete')) {
                         const idx = parseInt(e.target.dataset.layer);
                         this.levelData.layers = this.levelData.layers.filter(l => l.index !== idx);
+                        this.hiddenLayers.delete(idx);
                         if (this.activeLayer === idx) {
                             this.activeLayer = this.levelData.layers[0]?.index || 0;
                         }
@@ -602,7 +634,7 @@
                     this.levelData.cars.push({
                         column: col,
                         color: this.selectedColor,
-                        capacity: 8,
+                        capacity: DEFAULT_CAR_CAPACITY,
                         queueOrder: nextQueue,
                     });
                     this.normalizeCarQueueOrders();
@@ -626,7 +658,7 @@
                 for (const block of layer.blocks) {
                     const shape = SHAPES[block.shape];
                     if (!shape) continue;
-                    const cubes = shape.unitCount * (CONFIG.CUBES_PER_CELL || 4);
+                    const cubes = shape.unitCount * CUBES_PER_CELL;
                     cubesPerColor[block.color] = (cubesPerColor[block.color] || 0) + cubes;
                 }
             }
@@ -695,6 +727,8 @@
             // Draw blocks from bottom layer to top
             const sortedLayers = [...this.levelData.layers].sort((a, b) => a.index - b.index);
             for (const layer of sortedLayers) {
+                if (!this.isLayerVisible(layer.index)) continue;
+
                 const isActive = layer.index === this.activeLayer;
                 const alpha = isActive ? 1.0 : 0.35;
                 for (const block of layer.blocks) {
@@ -1006,6 +1040,7 @@
                 this.activeLayer = 0;
                 this.blockIdCounter = 1;
                 this.selectedBlockId = null;
+                this.hiddenLayers.clear();
                 this.syncSettingsToUI();
                 this.renderCarsConfig();
                 this.renderAll();
@@ -1130,6 +1165,7 @@
             }
 
             this.levelData = data;
+            this.hiddenLayers.clear();
             this.levelData.conveyorCapacity ??= CONFIG.CONVEYOR_CAPACITY;
             this.levelData.funnelCapacity ??= CONFIG.FUNNEL_CAPACITY;
             this.levelData.boosters ??= { magnet: 10, shuffle: 10, paintGun: 10 };
