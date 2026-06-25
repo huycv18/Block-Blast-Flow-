@@ -106,27 +106,73 @@ window.GameScene = class GameScene extends Phaser.Scene {
             const gridPos = this.screenToGrid(pointer.x, pointer.y);
 
             if (!gridPos) {
-                // Nếu đang chọn target booster mà bấm ngoài board thì cancel.
-                if (this.boosterManager && this.boosterManager.isTargeting()) {
+                if (this.boosterManager?.isTargeting()) {
                     this.boosterManager.cancelTargeting();
                 }
-
                 return;
             }
 
             const block = this.board.getBlockAt(gridPos.row, gridPos.col);
 
             if (!block) {
-                // Bug fix:
-                // Trước đây bấm vào ô trống trong board khi đang targeting booster thì không cancel.
-                if (this.boosterManager && this.boosterManager.isTargeting()) {
+                if (this.boosterManager?.isTargeting()) {
                     this.boosterManager.cancelTargeting();
                 }
-
                 return;
             }
 
-            this.handleBlockTap(block);
+            // Booster targeting: always immediate tap, no hold
+            if (this.boosterManager?.isTargeting()) {
+                this.handleBlockTap(block);
+                return;
+            }
+
+            // Track for tap-vs-hold distinction
+            this._heldBlock    = block;
+            this._holdXRayOn   = false;
+
+            // After delay → activate X-Ray peek on this block
+            this._holdTimer = this.time.delayedCall(
+                CONFIG.XRAY_HOLD_DELAY ?? 280,
+                () => {
+                    if (this._heldBlock === block) {
+                        this._holdXRayOn = true;
+                        this.board.setXRayModeForBlock(block, true);
+                    }
+                }
+            );
+        });
+
+        this.input.on('pointerup', () => {
+            if (this._holdTimer) {
+                this._holdTimer.remove();
+                this._holdTimer = null;
+            }
+
+            const block = this._heldBlock;
+            this._heldBlock = null;
+
+            if (this._holdXRayOn) {
+                // Long hold: restore X-Ray, no tap
+                this._holdXRayOn = false;
+                if (block) this.board.setXRayModeForBlock(block, false);
+            } else if (block) {
+                // Quick tap: handle normally
+                this.handleBlockTap(block);
+            }
+        });
+
+        // Cancel hold if pointer leaves the canvas
+        this.input.on('pointerout', () => {
+            if (this._holdTimer) {
+                this._holdTimer.remove();
+                this._holdTimer = null;
+            }
+            if (this._holdXRayOn && this._heldBlock) {
+                this._holdXRayOn = false;
+                this.board.setXRayModeForBlock(this._heldBlock, false);
+            }
+            this._heldBlock = null;
         });
     }
 
@@ -177,6 +223,10 @@ window.GameScene = class GameScene extends Phaser.Scene {
 
             this.resolvePostBoardChange();
         }
+    }
+
+    setXRayMode(isOn) {
+        if (this.board) this.board.setXRayMode(isOn);
     }
 
     resolvePostBoardChange() {

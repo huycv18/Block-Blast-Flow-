@@ -412,7 +412,7 @@ window.Block = class Block {
         switch (newState) {
             case 'pullable':
                 this.container.setVisible(true);
-                this.container.setAlpha(1);
+                this.updateAlpha();
                 this.container.setDepth(this.getBaseDepth());
 
                 for (const sprite of this.cellSprites) {
@@ -442,7 +442,7 @@ window.Block = class Block {
 
             case 'blocked':
                 this.container.setVisible(true);
-                this.container.setAlpha(1);
+                this.updateAlpha();
                 this.container.setDepth(this.getBaseDepth());
 
                 for (const sprite of this.cellSprites) {
@@ -478,6 +478,45 @@ window.Block = class Block {
                 this.container.setVisible(false);
                 break;
         }
+    }
+
+    /** Called by Board.setXRayMode — makes top-layer blocks transparent so user can see below. */
+    setXRay(isOn) {
+        this._xRay = isOn;
+        this.updateAlpha();
+        this.updateOverlayAlpha();
+    }
+
+    /** Container opacity: top layer fades in X-Ray mode. */
+    updateAlpha() {
+        if (!this.container || !this.container.scene || this.state === 'covered') return;
+        const xRayFade = this._xRay && this.visualLayerDepth === 0;
+        this.container.setAlpha(xRayFade ? (CONFIG.XRAY_TOP_ALPHA ?? 0.15) : 1);
+    }
+
+    /**
+     * Cell overlay (dark dim) alpha: in X-Ray mode reduce overlay on lower layers
+     * so they become clearly visible while the top layer is faded out.
+     */
+    updateOverlayAlpha() {
+        if (!this.container || !this.container.scene || this.state === 'covered') return;
+        if (this.visualLayerDepth === 0) return; // top layer has no overlay to adjust
+
+        let alpha;
+        if (this._xRay) {
+            // X-Ray: lift the dim so sub-layers are bright and easy to read
+            alpha = CONFIG.XRAY_LOWER_OVERLAY ?? 0.02;
+        } else {
+            // Normal mode: restore standard dim based on state
+            alpha = this.state === 'blocked'
+                ? this.getBlockedOverlayAlpha()
+                : this.getLayerOverlayAlpha();
+        }
+
+        for (const overlay of this.overlaySprites) {
+            overlay.setAlpha(alpha);
+        }
+        this.updateConnectorOverlay(alpha);
     }
 
     // ----------------------------------------------------------

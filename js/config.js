@@ -102,6 +102,9 @@ window.CONFIG = {
     // --- Layer ---
     LAYER_OVERLAYS: [0.0, 0.25, 0.45],
     MAX_INTERACTION_DEPTH: 3,
+    XRAY_TOP_ALPHA: 0,           // opacity of top-layer blocks when X-Ray is active (0 = fully invisible)
+    XRAY_LOWER_OVERLAY: 0.02,   // dark overlay remaining on sub-layers in X-Ray mode
+    XRAY_HOLD_DELAY: 300,        // ms user must hold a block before X-Ray peek activates
 };
 
 // ============================================================
