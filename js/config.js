@@ -36,6 +36,8 @@ window.CONFIG = {
     CONVEYOR_CAPACITY: 40,
     CONVEYOR_SPEED: 0.2,
     CLEANUP_SPEED_MULT: 2,
+    CAR_ABSORB_RADIUS: 55,     // pixel radius around car that pulls cubes off the belt
+    CUBE_ABSORB_DURATION: 380, // ms for cube tween into car (was 200)
 
     // --- Warning ---
     CONV_WARNING: 0.75,

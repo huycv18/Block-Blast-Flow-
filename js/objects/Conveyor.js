@@ -197,6 +197,7 @@ window.Conveyor = class Conveyor {
             cube: cube,
             pathT: entryT,
             color: cube.color,
+            absorbedByCars: new Set(), // cars already tried this lap
         });
     }
 
@@ -210,31 +211,55 @@ window.Conveyor = class Conveyor {
 
         const speed = CONFIG.CONVEYOR_SPEED * this.speedMultiplier * (delta / 1000);
 
+        const absorbRadius = CONFIG.CAR_ABSORB_RADIUS;
+        const metrics = this.getPathMetrics();
+        // Only absorb cubes on the bottom edge of the belt (t in bottom segment)
+        const botStart = metrics.topFrac + metrics.rightFrac;
+        const botEnd   = botStart + metrics.botFrac;
+
         for (let i = this.cubesOnBelt.length - 1; i >= 0; i--) {
             const entry = this.cubesOnBelt[i];
             if (entry.cube.state !== 'ON_CONVEYOR') continue;
 
-            const oldT = entry.pathT;
             entry.pathT += speed;
-            if (entry.pathT >= 1) entry.pathT -= 1;
+            if (entry.pathT >= 1) {
+                entry.pathT -= 1;
+                // Reset absorb set on full loop so cube can try cars again
+                entry.absorbedByCars = new Set();
+            }
 
-            // Update position
+            // Update screen position
             const pos = this.getPathPosition(entry.pathT);
             entry.cube.sprite.setPosition(pos.x, pos.y);
 
-            // Check stations
-            for (const station of this.stations) {
-                // Proper crossing detection accounting for path wraparound
-                // Calculate distance to station and distance traveled
-                const toStation = station.t > oldT ? station.t - oldT : 1 - oldT + station.t;
-                const traveled = entry.pathT > oldT ? entry.pathT - oldT : 1 - oldT + entry.pathT;
-                const crossed = traveled >= toStation && toStation > 0;
+            // Only check absorb on bottom segment of belt
+            const t = entry.pathT;
+            const onBottom = (t >= botStart && t <= botEnd);
+            if (!onBottom) continue;
 
-                if (crossed) {
-                    const car = carManager.findMatchingActiveCar(entry.color, station.column);
-                    if (car && car.reserveCube(entry.color)) {
+            // Car-based absorb zone: check X distance to each active car
+            const activeCars = carManager.getActiveCars();
+
+            for (const car of activeCars) {
+                // Skip if already tried this car in the current lap
+                if (!entry.absorbedByCars) entry.absorbedByCars = new Set();
+                if (entry.absorbedByCars.has(car)) continue;
+
+                // Color must match
+                if (car.color !== entry.color) continue;
+
+                // X-distance between cube and car column center
+                const carPos = car.getAbsorbPosition();
+                const dx = Math.abs(pos.x - carPos.x);
+
+                if (dx <= absorbRadius) {
+                    if (car.reserveCube(entry.color)) {
+                        entry.absorbedByCars.add(car);
                         this.matchCubeWithCar(entry, car);
                         break;
+                    } else {
+                        // Car is full — skip this car this lap
+                        entry.absorbedByCars.add(car);
                     }
                 }
             }
@@ -260,7 +285,7 @@ window.Conveyor = class Conveyor {
             scaleX: 0.5,
             scaleY: 0.5,
             alpha: 0.7,
-            duration: 200,
+            duration: CONFIG.CUBE_ABSORB_DURATION ?? 380,
             ease: 'Power2',
             onComplete: () => {
                 entry.cube.sprite.setVisible(false);
