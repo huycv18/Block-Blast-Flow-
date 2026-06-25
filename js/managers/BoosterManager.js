@@ -5,57 +5,138 @@
 window.BoosterManager = class BoosterManager {
     constructor(scene, boosterCounts) {
         this.scene = scene;
+
         this.counts = {
             magnet: boosterCounts?.magnet || 0,
             shuffle: boosterCounts?.shuffle || 0,
             paintGun: boosterCounts?.paintGun || 0,
         };
-        this.activeBooster = null; // null | 'magnet' | 'paintGun'
+
+        // null | 'magnet' | 'paintGun'
+        this.activeBooster = null;
+
         this.highlightedBlocks = [];
+        this.highlightTweens = new Map();
     }
 
-    // --- Magnet ---
+    // ----------------------------------------------------------
+    // Target helpers
+    // ----------------------------------------------------------
+
+    getMagnetTargets(board) {
+        if (!board || !board.blocks) return [];
+
+        const result = [];
+
+        for (const [id, block] of board.blocks) {
+            if (block && block.state === 'blocked') {
+                result.push(block);
+            }
+        }
+
+        return result;
+    }
+
+    getPaintGunTargets(board) {
+        return this.getPaintGunTopLayerTargets(board);
+    }
+
+    getPaintGunTopLayerTargets(board) {
+        if (!board || !board.getPullableBlocks) return [];
+
+        const pullable = board.getPullableBlocks().filter(block => {
+            return block &&
+                block.state === 'pullable' &&
+                !block.isResolving;
+        });
+
+        if (pullable.length === 0) return [];
+
+        // Layer trên cùng hiện tại trong số các block pullable.
+        // Theo code hiện tại: layer index lớn hơn nằm phía trên.
+        const topLayer = Math.max(...pullable.map(block => block.layer || 0));
+
+        return pullable.filter(block => block.layer === topLayer);
+    }
+
+    highlightBlocks(blocks, options = {}) {
+        const alpha = options.alpha ?? 0.72;
+        const duration = options.duration ?? 350;
+
+        this.highlightedBlocks = blocks;
+
+        for (const block of blocks) {
+            if (!block || !block.container || !block.container.scene) continue;
+
+            this.scene.tweens.killTweensOf(block.container);
+            block.container.setAlpha(1);
+
+            const tween = this.scene.tweens.add({
+                targets: block.container,
+                alpha,
+                duration,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut',
+            });
+
+            this.highlightTweens.set(block, tween);
+        }
+    }
+
+    delay(ms) {
+        return new Promise(resolve => {
+            this.scene.time.delayedCall(ms, resolve);
+        });
+    }
+
+    // ----------------------------------------------------------
+    // Magnet
+    // ----------------------------------------------------------
 
     activateMagnet(board) {
         if (this.counts.magnet <= 0) return false;
+
+        if (this.activeBooster === 'magnet') {
+            this.cancelTargeting();
+            return false;
+        }
+
+        if (this.activeBooster) {
+            this.cancelTargeting();
+        }
+
+        const targets = this.getMagnetTargets(board);
+
+        if (targets.length === 0) {
+            this.scene.events.emit('boosterFailed', 'magnet', 'noTargets');
+            return false;
+        }
+
         this.activeBooster = 'magnet';
 
-        // Highlight visible but blocked blocks
-        this.highlightedBlocks = [];
-        for (const [id, block] of board.blocks) {
-            if (block.state === 'blocked') {
-                this.highlightedBlocks.push(block);
-                if (block.container) {
-                    block.container.setAlpha(1);
-                    // Add glow effect
-                    this.scene.tweens.add({
-                        targets: block.container,
-                        alpha: 0.7,
-                        duration: 400,
-                        yoyo: true,
-                        repeat: -1,
-                        ease: 'Sine.easeInOut',
-                    });
-                }
-            }
-        }
+        this.highlightBlocks(targets, {
+            alpha: 0.70,
+            duration: 400,
+        });
 
         this.scene.events.emit('boosterTargeting', 'magnet');
         return true;
     }
 
     async useMagnetOn(block, board) {
-        if (this.activeBooster !== 'magnet') return;
-        if (block.state !== 'blocked') return;
+        if (this.activeBooster !== 'magnet') return false;
+        if (!block || block.state !== 'blocked') return false;
+        if (this.counts.magnet <= 0) return false;
 
         this.counts.magnet--;
         this.cancelTargeting();
 
-        // Extract block like normal pull
+        block.isResolving = true;
         this.scene.gameState.setState('ANIMATING');
 
-        // Magnetic pull VFX
         const center = block.getScreenCenter();
+
         const particles = this.scene.add.particles(center.x, center.y, 'particle_star', {
             speed: { min: 20, max: 60 },
             scale: { start: 0.6, end: 0 },
@@ -63,139 +144,379 @@ window.BoosterManager = class BoosterManager {
             quantity: 8,
             tint: 0x9B59B6,
         });
-        particles.setDepth(50);
-        this.scene.time.delayedCall(500, () => particles.destroy());
+
+        particles.setDepth(60);
+
+        this.scene.time.delayedCall(500, () => {
+            if (particles && particles.destroy) particles.destroy();
+        });
 
         await block.shake();
         await block.liftUp();
-        const cubes = this.scene.cubeManager.spawnFromBlock(block);
-        await block.blast();
-        board.removeBlock(block);
 
-        this.scene.time.delayedCall(800, () => {
-            this.scene.gameState.setState('PLAYING');
-            this.scene.gameState.checkWinCondition(board, this.scene.conveyor, this.scene.funnel);
-        });
+        // Magnet theo GDD: cube vẫn đi Funnel/Conveyor.
+        this.scene.cubeManager.spawnFromBlock(block);
+
+        board.removeBlock(block);
+        block.blast();
+
+        this.scene.cameras.main.shake(80, 0.005);
+        this.scene.resolvePostBoardChange();
 
         this.scene.events.emit('boosterUsed', 'magnet', this.counts.magnet);
+        return true;
     }
 
-    // --- Shuffle ---
+    // ----------------------------------------------------------
+    // Shuffle
+    // ----------------------------------------------------------
 
     activateShuffle(board, carManager) {
         if (this.counts.shuffle <= 0) return false;
-        this.counts.shuffle--;
 
-        const pullable = board.getPullableBlocks();
-        const pullableColors = new Set(pullable.map(b => b.color));
-        carManager.shuffleForColors(pullableColors);
+        if (this.activeBooster) {
+            this.cancelTargeting();
+        }
+
+        board = board || this.scene.board;
+        carManager = carManager || this.scene.carManager;
+
+        if (!board || !carManager) return false;
+
+        const pullableBlocks = board.getPullableBlocks
+            ? board.getPullableBlocks()
+            : [];
+
+        if (pullableBlocks.length === 0) {
+            this.scene.events.emit('boosterFailed', 'shuffle', 'noPullableBlocks');
+            return false;
+        }
+
+        const didShuffle = carManager.shuffleForPullableBlocks(pullableBlocks);
+
+        if (!didShuffle) {
+            this.scene.events.emit('boosterFailed', 'shuffle', 'noChange');
+            return false;
+        }
+
+        this.counts.shuffle--;
 
         this.scene.events.emit('boosterUsed', 'shuffle', this.counts.shuffle);
         return true;
     }
 
-    // --- Paint Gun ---
+    // ----------------------------------------------------------
+    // Paint Gun
+    // ----------------------------------------------------------
 
     activatePaintGun(board) {
         if (this.counts.paintGun <= 0) return false;
+
+        if (this.activeBooster === 'paintGun') {
+            this.cancelTargeting();
+            return false;
+        }
+
+        if (this.activeBooster) {
+            this.cancelTargeting();
+        }
+
+        const targets = this.getPaintGunTopLayerTargets(board);
+
+        if (targets.length === 0) {
+            this.scene.events.emit('boosterFailed', 'paintGun', 'noTargets');
+            return false;
+        }
+
         this.activeBooster = 'paintGun';
 
-        // Highlight pullable blocks grouped by color
-        this.highlightedBlocks = board.getPullableBlocks();
-        for (const block of this.highlightedBlocks) {
-            if (block.container) {
-                this.scene.tweens.add({
-                    targets: block.container,
-                    alpha: 0.7,
-                    duration: 300,
-                    yoyo: true,
-                    repeat: -1,
-                    ease: 'Sine.easeInOut',
-                });
-            }
-        }
+        this.highlightBlocks(targets, {
+            alpha: 0.72,
+            duration: 300,
+        });
 
         this.scene.events.emit('boosterTargeting', 'paintGun');
         return true;
     }
 
     async usePaintGunOn(block, board, carManager, cubeManager) {
-        if (this.activeBooster !== 'paintGun') return;
-        if (block.state !== 'pullable') return;
+        if (this.activeBooster !== 'paintGun') return false;
+        if (!block || block.state !== 'pullable') return false;
+        if (this.counts.paintGun <= 0) return false;
+
+        const topLayerTargets = this.getPaintGunTopLayerTargets(board);
+
+        // Chỉ cho chọn block ở layer trên cùng hiện tại.
+        if (!topLayerTargets.includes(block)) {
+            if (block.shake) await block.shake();
+            return false;
+        }
 
         const targetColor = block.color;
+
+        // Chỉ phá block cùng màu, cùng layer trên cùng, đang pullable.
+        const targets = topLayerTargets.filter(b => {
+            return b &&
+                b.color === targetColor &&
+                b.state === 'pullable' &&
+                !b.isResolving;
+        });
+
+        if (targets.length === 0) return false;
+
+        const availableSlots = carManager.getPaintGunAvailableCapacity
+            ? carManager.getPaintGunAvailableCapacity(targetColor)
+            : 0;
+
+        if (availableSlots <= 0) {
+            this.scene.events.emit('boosterFailed', 'paintGun', 'noMatchingCar');
+            return false;
+        }
+
         this.counts.paintGun--;
         this.cancelTargeting();
 
         this.scene.gameState.setState('ANIMATING');
 
-        // Find all pullable blocks of same color
-        const targets = board.getPullableBlocks().filter(b => b.color === targetColor);
+        const sourcePositions = [];
+        let totalCubeCount = 0;
 
-        // Blast them sequentially with stagger
-        for (let i = 0; i < targets.length; i++) {
-            const b = targets[i];
+        for (const b of targets) {
+            b.isResolving = true;
 
-            // Paint splash VFX
-            const center = b.getScreenCenter();
-            const particles = this.scene.add.particles(center.x, center.y, 'particle_' + targetColor, {
-                speed: { min: 100, max: 250 },
-                scale: { start: 1, end: 0 },
-                lifespan: 600,
-                quantity: 15,
+            const positions = b.getCubeSpawnPositions
+                ? b.getCubeSpawnPositions()
+                : [b.getScreenCenter()];
+
+            sourcePositions.push(...positions);
+
+            const unitCount = Array.isArray(b.cells) ? b.cells.length : 1;
+            totalCubeCount += unitCount * (CONFIG.CUBES_PER_CELL || 4);
+        }
+
+        // Nếu vì level data sai mà car capacity thiếu, chỉ fill được phần còn slot.
+        const cubeCountToSend = Math.min(totalCubeCount, availableSlots);
+
+        // Nổ gần như cùng lúc, stagger nhẹ cho cảm giác chain.
+        const PAINT_BLOCK_STAGGER = 55;
+
+        const blastPromises = targets.map((b, index) => {
+            return this.delay(index * PAINT_BLOCK_STAGGER).then(async () => {
+                if (!b || !board.blocks.has(b.id)) return;
+
+                const center = b.getScreenCenter();
+
+                const particles = this.scene.add.particles(center.x, center.y, 'particle_' + targetColor, {
+                    speed: { min: 120, max: 280 },
+                    scale: { start: 1, end: 0 },
+                    lifespan: 600,
+                    quantity: 18,
+                });
+
+                particles.setDepth(70);
+
+                this.scene.time.delayedCall(650, () => {
+                    if (particles && particles.destroy) particles.destroy();
+                });
+
+                await b.shake();
+                await b.liftUp();
+
+                board.removeBlock(b);
+
+                // Không spawn cube vào Funnel/Conveyor.
+                b.blast();
+
+                this.scene.cameras.main.shake(50, 0.004);
             });
-            particles.setDepth(50);
-            this.scene.time.delayedCall(700, () => particles.destroy());
+        });
 
-            // Blast block
-            await b.shake();
-            await b.blast();
+        await Promise.all(blastPromises);
 
-            // Cubes go directly to cars (skip conveyor)
-            const cubeCount = SHAPES[b.shapeName].unitCount * CONFIG.CUBES_PER_CELL;
-            let remaining = cubeCount;
+        await this.sendPaintGunCubesBurstToCars(
+            targetColor,
+            cubeCountToSend,
+            sourcePositions,
+            carManager
+        );
 
-            // Fill cars directly
-            while (remaining > 0) {
-                const car = carManager.findMatchingActiveCar(targetColor);
-                if (!car) break;
+        this.scene.resolvePostBoardChange();
+        this.scene.events.emit('boosterUsed', 'paintGun', this.counts.paintGun);
 
-                const toFill = Math.min(remaining, car.capacity - car.filledCount);
-                for (let j = 0; j < toFill; j++) {
-                    const isFull = car.addCube();
-                    remaining--;
-                    if (isFull) {
-                        await carManager.onCarFull(car);
-                        break;
-                    }
-                }
+        return true;
+    }
+
+    /**
+     * Paint Gun direct burst:
+     * - Allocate cubes to all same-color cars with free capacity.
+     * - Active and non-active queue cars can all receive cubes.
+     * - Cubes fly almost at the same time, not one-by-one.
+     */
+    async sendPaintGunCubesBurstToCars(color, cubeCount, sourcePositions, carManager) {
+        if (cubeCount <= 0) return;
+
+        const sources = sourcePositions && sourcePositions.length > 0
+            ? sourcePositions
+            : [{ x: CONFIG.CONTAINER_X, y: CONFIG.CONTAINER_GRID_BOTTOM }];
+
+        const allocations = carManager.allocatePaintGunCubes
+            ? carManager.allocatePaintGunCubes(color, cubeCount)
+            : [];
+
+        if (allocations.length === 0) return;
+
+        const flyPromises = [];
+        let globalIndex = 0;
+
+        for (const allocation of allocations) {
+            const car = allocation.car;
+            const amount = allocation.amount;
+
+            if (!car || amount <= 0) continue;
+
+            // Xe không active cũng được hiện ra tạm để thấy cube bay vào.
+            if (carManager.prepareCarForPaintGunFill) {
+                carManager.prepareCarForPaintGunFill(car);
             }
 
-            board.removeBlock(b);
+            for (let i = 0; i < amount; i++) {
+                const source = sources[globalIndex % sources.length];
 
-            // Stagger between blocks
-            if (i < targets.length - 1) {
-                await new Promise(r => this.scene.time.delayedCall(200, r));
+                // Stagger cực nhỏ để nhìn như ào ạt, không phải lần lượt.
+                const startDelay = Math.floor(globalIndex / 6) * 12 + Phaser.Math.Between(0, 18);
+
+                flyPromises.push(
+                    this.flyPaintCubeToCarBurst(color, source, car, globalIndex, startDelay)
+                        .then(() => {
+                            this.addDirectCubeToCar(car);
+                        })
+                );
+
+                globalIndex++;
             }
         }
 
-        this.scene.gameState.setState('PLAYING');
-        this.scene.gameState.checkWinCondition(board, this.scene.conveyor, this.scene.funnel);
-        this.scene.events.emit('boosterUsed', 'paintGun', this.counts.paintGun);
+        await Promise.all(flyPromises);
+
+        // Sau khi cả đợt cube bay xong mới xử lý xe full.
+        // Như vậy cảm giác là tất cả xe được fill cùng lúc.
+        if (carManager.resolvePaintGunFullCars) {
+            await carManager.resolvePaintGunFullCars(color);
+        }
     }
 
-    // --- Common ---
+    flyPaintCubeToCarBurst(color, from, car, index = 0, startDelay = 0) {
+        return new Promise(resolve => {
+            if (!car || !car.container || !car.container.scene) {
+                resolve();
+                return;
+            }
+
+            this.scene.time.delayedCall(startDelay, () => {
+                if (!car || !car.container || !car.container.scene) {
+                    resolve();
+                    return;
+                }
+
+                const target = car.getAbsorbPosition
+                    ? car.getAbsorbPosition()
+                    : { x: car.container.x, y: car.container.y };
+
+                const sprite = this.scene.add.image(from.x, from.y, 'cube_' + color);
+                sprite.setDepth(90);
+                sprite.setScale(0.86);
+                sprite.setAlpha(1);
+
+                const jitterX = Phaser.Math.Between(-12, 12);
+                const jitterY = Phaser.Math.Between(-8, 8);
+
+                const midX = (from.x + target.x) / 2 + Phaser.Math.Between(-25, 25);
+                const midY = (from.y + target.y) / 2 - Phaser.Math.Between(20, 55);
+
+                this.scene.tweens.add({
+                    targets: sprite,
+                    x: midX,
+                    y: midY,
+                    scaleX: 0.78,
+                    scaleY: 0.78,
+                    duration: 90,
+                    ease: 'Quad.easeOut',
+                    onComplete: () => {
+                        if (!sprite || !sprite.scene) {
+                            resolve();
+                            return;
+                        }
+
+                        this.scene.tweens.add({
+                            targets: sprite,
+                            x: target.x + jitterX,
+                            y: target.y + jitterY,
+                            scaleX: 0.48,
+                            scaleY: 0.48,
+                            alpha: 0.95,
+                            duration: 130 + (index % 5) * 8,
+                            ease: 'Cubic.easeIn',
+                            onComplete: () => {
+                                if (sprite && sprite.destroy) sprite.destroy();
+                                resolve();
+                            },
+                        });
+                    },
+                });
+            });
+        });
+    }
+
+    addDirectCubeToCar(car) {
+        if (!car) return false;
+        if (car.isFull && car.isFull()) return true;
+
+        car.filledCount = Math.min(car.capacity, car.filledCount + 1);
+
+        if (car.updateFillVisual) {
+            car.updateFillVisual();
+        }
+
+        if (car.container && car.container.scene) {
+            const targetScale = car.isActive
+                ? 1.06
+                : (CONFIG.CAR_ROW2_SCALE || 0.82) * 1.06;
+
+            this.scene.tweens.add({
+                targets: car.container,
+                scaleX: targetScale,
+                scaleY: targetScale,
+                duration: 45,
+                yoyo: true,
+                ease: 'Power2',
+            });
+        }
+
+        return car.isFull ? car.isFull() : car.filledCount >= car.capacity;
+    }
+
+    // ----------------------------------------------------------
+    // Common
+    // ----------------------------------------------------------
 
     cancelTargeting() {
-        this.activeBooster = null;
-        // Remove highlight tweens
+        for (const tween of this.highlightTweens.values()) {
+            if (tween && tween.stop) {
+                tween.stop();
+            }
+        }
+
+        this.highlightTweens.clear();
+
         for (const block of this.highlightedBlocks) {
-            if (block.container) {
-                this.scene.tweens.killTweensOf(block.container);
+            if (block && block.container && block.container.scene) {
                 block.container.setAlpha(1);
             }
         }
+
         this.highlightedBlocks = [];
+        this.activeBooster = null;
+
         this.scene.events.emit('boosterTargeting', null);
     }
 
