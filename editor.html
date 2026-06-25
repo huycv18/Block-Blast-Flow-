@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Block Cube Puzzle — Level Editor</title>
+    <link rel="stylesheet" href="./css/editor.css">
+</head>
+<body>
+    <div id="editor-app">
+        <!-- Header -->
+        <header id="editor-header">
+            <h1>🧩 Block Cube Puzzle — Level Editor</h1>
+            <div class="header-actions">
+                <button class="btn btn-outline btn-sm" id="btn-new">✨ New Level</button>
+                <button class="btn btn-outline btn-sm" id="btn-import">📂 Import</button>
+                <button class="btn btn-primary btn-sm" id="btn-export">💾 Export JSON</button>
+            </div>
+        </header>
+
+        <!-- Main -->
+        <main id="editor-main">
+            <!-- Left Panel -->
+            <aside id="left-panel" class="panel">
+                <!-- Tools -->
+                <div class="panel-section">
+                    <div class="panel-section-title">Tools</div>
+                    <div class="tool-group" id="tool-buttons">
+                        <button class="tool-btn active" data-tool="draw"><span class="icon">✏️</span> Draw</button>
+                        <button class="tool-btn" data-tool="erase"><span class="icon">🧹</span> Erase</button>
+                        <button class="tool-btn" data-tool="select"><span class="icon">👆</span> Select</button>
+                    </div>
+                </div>
+
+                <!-- Colors -->
+                <div class="panel-section">
+                    <div class="panel-section-title">Color</div>
+                    <div class="color-grid" id="color-grid"></div>
+                </div>
+
+                <!-- Shapes -->
+                <div class="panel-section">
+                    <div class="panel-section-title">Shape</div>
+                    <div class="shape-grid" id="shape-grid"></div>
+                </div>
+
+                <!-- Layers -->
+                <div class="panel-section">
+                    <div class="panel-section-title">Layers</div>
+                    <div class="layer-list" id="layer-list"></div>
+                    <button class="btn btn-outline btn-sm btn-block" id="btn-add-layer" style="margin-top:8px">+ Add Layer</button>
+                </div>
+            </aside>
+
+            <!-- Grid Area -->
+            <div id="grid-area">
+                <canvas id="grid-canvas"></canvas>
+                <div id="grid-info">Hover over grid to see coordinates</div>
+            </div>
+
+            <!-- Right Panel -->
+            <aside id="right-panel" class="panel">
+                <!-- Level Settings -->
+                <div class="panel-section">
+                    <div class="panel-section-title">Level Settings</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Level ID</label>
+                            <input type="number" id="input-level-id" min="1" value="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Difficulty</label>
+                            <select id="input-difficulty">
+                                <option value="Tutorial">Tutorial</option>
+                                <option value="Easy">Easy</option>
+                                <option value="Normal">Normal</option>
+                                <option value="Hard">Hard</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Level Name</label>
+                        <input type="text" id="input-level-name" placeholder="My Level" value="New Level">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Conveyor Cap</label>
+                            <input type="number" id="input-conveyor-cap" min="10" max="200" value="40">
+                        </div>
+                        <div class="form-group">
+                            <label>Funnel Cap</label>
+                            <input type="number" id="input-funnel-cap" min="10" max="200" value="40">
+                        </div>
+                    </div>
+                    <div class="panel-section-title" style="margin-top:8px">Boosters</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>🧲 Magnet</label>
+                            <input type="number" id="input-booster-magnet" min="0" max="99" value="10">
+                        </div>
+                        <div class="form-group">
+                            <label>🔀 Shuffle</label>
+                            <input type="number" id="input-booster-shuffle" min="0" max="99" value="10">
+                        </div>
+                        <div class="form-group">
+                            <label>🎨 Paint</label>
+                            <input type="number" id="input-booster-paint" min="0" max="99" value="10">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cars Configuration -->
+                <div class="panel-section">
+                    <div class="panel-section-title">Cars</div>
+                    <div id="cars-config"></div>
+                </div>
+
+                <!-- Validation -->
+                <div class="panel-section">
+                    <div class="panel-section-title">Validation</div>
+                    <div class="validation-list" id="validation-list"></div>
+                </div>
+
+                <!-- Level Bank -->
+                <div class="panel-section">
+                    <div class="panel-section-title">Level Bank</div>
+                    <div class="actions-grid">
+                        <div class="actions-row">
+                            <button class="btn btn-primary" id="btn-save-bank">💾 Save to Bank</button>
+                            <button class="btn btn-success" id="btn-playtest">▶ Play Test</button>
+                        </div>
+                        <div class="actions-row">
+                            <button class="btn btn-outline" id="btn-send-game">🎮 Send All to Game</button>
+                            <button class="btn btn-outline" id="btn-gen-levelsjs">📄 Export levels.js</button>
+                        </div>
+                    </div>
+                    <div id="bank-list" style="margin-top:10px;"></div>
+                </div>
+
+                <!-- Actions -->
+                <div class="panel-section">
+                    <div class="panel-section-title">Actions</div>
+                    <div class="actions-grid">
+                        <div class="actions-row">
+                            <button class="btn btn-primary" id="btn-copy">📋 Copy JSON</button>
+                            <button class="btn btn-outline" id="btn-clear">🗑 Clear All</button>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Status Bar -->
+        <footer id="status-bar">
+            <div class="status-item">
+                <div class="status-dot" id="status-dot"></div>
+                <span id="status-text">Ready</span>
+            </div>
+            <div class="status-item" id="status-blocks">Blocks: 0</div>
+            <div class="status-item" id="status-selection">Tool: Draw | red DOT</div>
+        </footer>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- Hidden file input -->
+    <input type="file" id="import-file-input" accept=".json,.js,.txt">
+
+    <!-- Scripts (shared data) -->
+    <script src="./js/config.js"></script>
+    <script src="./js/data/shapes.js"></script>
+    <script src="./js/data/levelValidator.js"></script>
+    <!-- Editor -->
+    <script src="./js/editor/LevelEditor.js"></script>
+</body>
+</html>

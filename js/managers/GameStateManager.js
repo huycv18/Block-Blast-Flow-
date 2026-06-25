@@ -91,6 +91,7 @@ window.GameStateManager = class GameStateManager {
             quantity: 30,
             gravityY: 200,
         });
+        emitter.setDepth(50);
         this.scene.time.delayedCall(500, () => emitter.stop());
         this.scene.time.delayedCall(2000, () => emitter.destroy());
     }

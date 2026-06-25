@@ -12,6 +12,43 @@ window.GameScene = class GameScene extends Phaser.Scene {
     }
 
     create() {
+        // Check if launched from editor play-test
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('testLevel')) {
+            try {
+                const json = localStorage.getItem('editorTestLevel');
+                if (json) {
+                    const testLevel = JSON.parse(json);
+                    console.log('[GameScene] Loading test level from editor:', testLevel.name);
+                    this.loadLevel(testLevel);
+                    return;
+                }
+            } catch (e) {
+                console.warn('[GameScene] Failed to load test level:', e);
+            }
+        }
+
+        // Check if custom levels exist in localStorage
+        try {
+            const customLevels = localStorage.getItem('customLevels');
+            if (customLevels) {
+                const parsed = JSON.parse(customLevels);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    window.LEVELS = parsed;
+                    console.log('[GameScene] Loaded', parsed.length, 'custom levels from localStorage');
+                }
+            }
+        } catch (e) { /* ignore */ }
+
+        // Check if specific level index is requested via URL (?level=N)
+        const levelParam = params.get('level');
+        if (levelParam !== null) {
+            const parsedLevel = parseInt(levelParam, 10);
+            if (!isNaN(parsedLevel) && parsedLevel >= 0 && parsedLevel < LEVELS.length) {
+                this.currentLevel = parsedLevel;
+            }
+        }
+
         this.loadLevel(LEVELS[this.currentLevel]);
     }
 

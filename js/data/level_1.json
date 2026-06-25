@@ -1,0 +1,51 @@
+{
+    "id": 1,
+    "name": "1",
+    "difficulty": "Tutorial",
+    "boardSize": {
+        "cols": 8,
+        "rows": 8
+    },
+    "conveyorCapacity": 40,
+    "funnelCapacity": 40,
+    "layers": [
+        {
+            "index": 1,
+            "blocks": [
+                {
+                    "id": "b2",
+                    "shape": "O",
+                    "color": "red",
+                    "row": 2,
+                    "col": 2
+                },
+                {
+                    "id": "b3",
+                    "shape": "O",
+                    "color": "blue",
+                    "row": 2,
+                    "col": 4
+                }
+            ]
+        }
+    ],
+    "cars": [
+        {
+            "column": 0,
+            "color": "red",
+            "capacity": 8,
+            "queueOrder": 0
+        },
+        {
+            "column": 1,
+            "color": "blue",
+            "capacity": 8,
+            "queueOrder": 0
+        }
+    ],
+    "boosters": {
+        "magnet": 10,
+        "shuffle": 10,
+        "paintGun": 10
+    }
+}

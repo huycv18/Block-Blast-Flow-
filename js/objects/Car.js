@@ -160,15 +160,15 @@ window.Car = class Car {
     }
 
     canAccept(cubeColor) {
-        return this.color === cubeColor &&
-            (this.filledCount + this.reservedCount) < this.capacity &&
-            !this.isExiting;
+        return this.color === cubeColor && (this.filledCount + this.reservedCount) < this.capacity && !this.isExiting;
     }
 
     reserveCube(cubeColor) {
-        if (!this.canAccept(cubeColor)) return false;
-        this.reservedCount++;
-        return true;
+        if (this.canAccept(cubeColor)) {
+            this.reservedCount++;
+            return true;
+        }
+        return false;
     }
 
     setActive(active) {
@@ -197,6 +197,7 @@ window.Car = class Car {
                     gravityY: 150,
                 }
             );
+            particles.setDepth(50);
             this.scene.time.delayedCall(600, () => particles.destroy());
 
             // Bounce

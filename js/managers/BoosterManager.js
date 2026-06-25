@@ -63,6 +63,7 @@ window.BoosterManager = class BoosterManager {
             quantity: 8,
             tint: 0x9B59B6,
         });
+        particles.setDepth(50);
         this.scene.time.delayedCall(500, () => particles.destroy());
 
         await block.shake();
@@ -143,6 +144,7 @@ window.BoosterManager = class BoosterManager {
                 lifespan: 600,
                 quantity: 15,
             });
+            particles.setDepth(50);
             this.scene.time.delayedCall(700, () => particles.destroy());
 
             // Blast block

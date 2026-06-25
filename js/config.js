@@ -9,27 +9,27 @@ window.CONFIG = {
     GAME_HEIGHT: 800,
 
     // --- Grid ---
-    GRID_COLS: 8,
-    GRID_ROWS: 8,
+    GRID_COLS: 6,
+    GRID_ROWS: 6,
     CELL_SIZE: 42,
     CELL_DRAW: 39,
     CELL_RADIUS: 5,
-    BOARD_OFFSET_X: 57,
+    BOARD_OFFSET_X: 99,
     BOARD_OFFSET_Y: 135,
 
     // --- Board Container ---
     CONTAINER_X: 225,
     CONTAINER_TOP: 120,
-    CONTAINER_WIDTH: 360,
-    CONTAINER_GRID_BOTTOM: 475,
-    CONTAINER_FUNNEL_BOTTOM: 530,
+    CONTAINER_WIDTH: 300,
+    CONTAINER_GRID_BOTTOM: 400,
+    CONTAINER_FUNNEL_BOTTOM: 455,
     FUNNEL_DRAIN_WIDTH: 40,
     CONTAINER_RADIUS: 16,
     CONTAINER_BORDER: 4,
 
     // --- Conveyor ---
     CONVEYOR_CENTER_X: 225,
-    CONVEYOR_CENTER_Y: 562,
+    CONVEYOR_CENTER_Y: 490,
     CONVEYOR_WIDTH: 340,
     CONVEYOR_HEIGHT: 40,
     CONVEYOR_CORNER_R: 20,
@@ -42,12 +42,12 @@ window.CONFIG = {
     CONV_DANGER: 0.90,
 
     // --- Road ---
-    ROAD_Y: 598,
+    ROAD_Y: 526,
     ROAD_HEIGHT: 22,
 
     // --- Cars ---
-    CAR_ROW1_Y: 655,
-    CAR_ROW2_Y: 730,
+    CAR_ROW1_Y: 585,
+    CAR_ROW2_Y: 660,
     CAR_WIDTH: 90,
     CAR_HEIGHT: 55,
     CAR_ROW2_SCALE: 0.7,
@@ -102,14 +102,14 @@ window.CONFIG = {
 // Color Definitions
 // ============================================================
 window.COLORS = {
-    red:    { hex: 0xE74C3C, css: '#E74C3C', light: 0xF1948A, dark: 0xC0392B },
-    blue:   { hex: 0x3498DB, css: '#3498DB', light: 0x85C1E9, dark: 0x2471A3 },
-    green:  { hex: 0x2ECC71, css: '#2ECC71', light: 0x82E0AA, dark: 0x1E8449 },
+    red: { hex: 0xE74C3C, css: '#E74C3C', light: 0xF1948A, dark: 0xC0392B },
+    blue: { hex: 0x3498DB, css: '#3498DB', light: 0x85C1E9, dark: 0x2471A3 },
+    green: { hex: 0x2ECC71, css: '#2ECC71', light: 0x82E0AA, dark: 0x1E8449 },
     yellow: { hex: 0xF1C40F, css: '#F1C40F', light: 0xF7DC6F, dark: 0xD4AC0D },
     orange: { hex: 0xE67E22, css: '#E67E22', light: 0xF0B27A, dark: 0xCA6F1E },
     purple: { hex: 0x9B59B6, css: '#9B59B6', light: 0xC39BD3, dark: 0x7D3C98 },
-    pink:   { hex: 0xE91E8A, css: '#E91E8A', light: 0xF48FB1, dark: 0xC2185B },
-    cyan:   { hex: 0x1ABC9C, css: '#1ABC9C', light: 0x76D7C4, dark: 0x148F77 },
+    pink: { hex: 0xE91E8A, css: '#E91E8A', light: 0xF48FB1, dark: 0xC2185B },
+    cyan: { hex: 0x1ABC9C, css: '#1ABC9C', light: 0x76D7C4, dark: 0x148F77 },
 };
 
 window.COLOR_NAMES = Object.keys(window.COLORS);
@@ -118,26 +118,26 @@ window.COLOR_NAMES = Object.keys(window.COLORS);
 // Theme / UI Colors
 // ============================================================
 window.THEME = {
-    BG:               0x2D2D3D,
-    BG_CSS:           '#2D2D3D',
-    CONTAINER_FILL:   0x3A3A4A,
+    BG: 0x2D2D3D,
+    BG_CSS: '#2D2D3D',
+    CONTAINER_FILL: 0x3A3A4A,
     CONTAINER_STROKE: 0x555568,
-    GRID_EMPTY:       0x353545,
+    GRID_EMPTY: 0x353545,
     GRID_EMPTY_LIGHT: 0x404055,
-    ROAD_SURFACE:     0x555568,
-    ROAD_DASH:        0xF1C40F,
-    ROAD_EDGE:        0x888899,
-    BOOSTER_BG:       0x4A7BD9,
+    ROAD_SURFACE: 0x555568,
+    ROAD_DASH: 0xF1C40F,
+    ROAD_EDGE: 0x888899,
+    BOOSTER_BG: 0x4A7BD9,
     BOOSTER_BG_LIGHT: 0x5B8CE6,
-    HEADER_TEXT:      0xFFFFFF,
-    HEADER_SUB:       0xBBBBCC,
-    UI_PANEL:         0x3A3A4A,
-    UI_PANEL_BORDER:  0x555568,
-    OVERLAY_DIM:      0x000000,
-    WARNING_ORANGE:   0xE67E22,
-    DANGER_RED:       0xE74C3C,
-    SUCCESS_GREEN:    0x2ECC71,
-    COIN_GOLD:        0xF1C40F,
-    WHITE:            0xFFFFFF,
-    TEXT_DARK:        0x2D2D3D,
+    HEADER_TEXT: 0xFFFFFF,
+    HEADER_SUB: 0xBBBBCC,
+    UI_PANEL: 0x3A3A4A,
+    UI_PANEL_BORDER: 0x555568,
+    OVERLAY_DIM: 0x000000,
+    WARNING_ORANGE: 0xE67E22,
+    DANGER_RED: 0xE74C3C,
+    SUCCESS_GREEN: 0x2ECC71,
+    COIN_GOLD: 0xF1C40F,
+    WHITE: 0xFFFFFF,
+    TEXT_DARK: 0x2D2D3D,
 };

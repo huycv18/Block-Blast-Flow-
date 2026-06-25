@@ -135,7 +135,7 @@ window.CubeManager = class CubeManager {
                 const dt = 0.016;
                 cube.sprite.x += cube.vx * dt;
                 cube.sprite.y += cube.vy * dt;
-                cube.vy += 300 * dt; // Reduced gravity for slower falling
+                cube.vy += 200 * dt; // Reduced gravity for slower falling
             }
             else if (cube.state === 'PHYSICS' && cube.body) {
                 // Sync sprite with physics body
