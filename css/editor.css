@@ -301,6 +301,47 @@ html, body {
     color: var(--text-muted);
 }
 
+.block-props-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.key-lock-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.key-lock-row label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+.key-lock-row select {
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-light);
+    background: var(--bg-input);
+    color: var(--text);
+    font-size: 12px;
+}
+
+.key-lock-warning {
+    min-height: 14px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: #F7DC6F;
+}
+
+.key-lock-validation {
+    border-color: rgba(247, 220, 111, 0.45);
+}
+
 .shape-preview-cell.filled {
     background: var(--accent-light);
 }

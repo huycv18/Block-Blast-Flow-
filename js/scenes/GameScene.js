@@ -199,6 +199,11 @@ window.GameScene = class GameScene extends Phaser.Scene {
 
         if (block.state === 'covered') return;
 
+        if (block.isLocked) {
+            await block.shakeLocked();
+            return;
+        }
+
         if (block.isFrozen && block.isFrozen()) {
             await block.shakeFrozen();
             return;
@@ -227,6 +232,9 @@ window.GameScene = class GameScene extends Phaser.Scene {
     this.cubeManager.spawnFromBlock(block);
 
     this.board.removeBlock(block);
+    if (block.keyColor && this.board.activateKey) {
+        this.board.activateKey(block.keyColor, block);
+    }
     block.blast();
 
     // Chỉ giảm số những Frozen Block đã reveal từ trước lượt blast này.

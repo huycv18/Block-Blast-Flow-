@@ -29,7 +29,10 @@ window.BoosterManager = class BoosterManager {
         const result = [];
 
         for (const [id, block] of board.blocks) {
-            if (block && block.state === 'blocked' && !(block.isFrozen && block.isFrozen())) {
+            if (block &&
+                block.state === 'blocked' &&
+                !(block.isFrozen && block.isFrozen()) &&
+                !block.isLocked) {
                 result.push(block);
             }
         }
@@ -48,6 +51,7 @@ window.BoosterManager = class BoosterManager {
             return block &&
                 block.state === 'pullable' &&
                 !(block.isFrozen && block.isFrozen()) &&
+                !block.isLocked &&
                 !block.isResolving;
         });
 
@@ -127,6 +131,10 @@ window.BoosterManager = class BoosterManager {
 
     async useMagnetOn(block, board) {
         if (this.activeBooster !== 'magnet') return false;
+        if (block && block.isLocked) {
+            if (block.shakeLocked) await block.shakeLocked();
+            return false;
+        }
         if (block && block.isFrozen && block.isFrozen()) {
             if (block.shakeFrozen) await block.shakeFrozen();
             return false;
@@ -169,6 +177,9 @@ await block.liftUp();
 this.scene.cubeManager.spawnFromBlock(block);
 
 board.removeBlock(block);
+if (block.keyColor && board.activateKey) {
+    board.activateKey(block.keyColor, block);
+}
 block.blast();
 
 if (board.decreaseFrozenCounts) {
@@ -259,6 +270,10 @@ if (board.decreaseFrozenCounts) {
 
     async usePaintGunOn(block, board, carManager, cubeManager) {
         if (this.activeBooster !== 'paintGun') return false;
+        if (block && block.isLocked) {
+            if (block.shakeLocked) await block.shakeLocked();
+            return false;
+        }
         if (block && block.isFrozen && block.isFrozen()) {
             if (block.shakeFrozen) await block.shakeFrozen();
             return false;
@@ -289,6 +304,7 @@ let resolvedBlastCount = 0;
                 b.color === targetColor &&
                 b.state === 'pullable' &&
                 !(b.isFrozen && b.isFrozen()) &&
+                !b.isLocked &&
                 !b.isResolving;
         });
 
@@ -353,6 +369,9 @@ let resolvedBlastCount = 0;
                 await b.liftUp();
 
                 board.removeBlock(b);
+                if (b.keyColor && board.activateKey) {
+                    board.activateKey(b.keyColor, b);
+                }
 
 // Không spawn cube vào Funnel/Conveyor.
 b.blast();

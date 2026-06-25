@@ -431,7 +431,9 @@ window.Board = class Board {
         const result = [];
 
         for (const [id, block] of this.blocks) {
-            if (block.state === 'pullable' && !(block.isFrozen && block.isFrozen())) {
+            if (block.state === 'pullable' &&
+                !(block.isFrozen && block.isFrozen()) &&
+                !block.isLocked) {
                 result.push(block);
             }
         }
@@ -469,6 +471,7 @@ getFrozenCountdownTargets() {
 
     for (const [id, block] of this.blocks) {
         if (!block || !block.isFrozen || !block.isFrozen()) continue;
+        if (block.isLocked) continue;
 
         // Quan trọng:
         // Frozen Block ở layer dưới chưa reveal thì không được giảm số.
@@ -524,6 +527,82 @@ decreaseFrozenCounts(amount = 1, options = {}) {
 
     return unlocked;
 }
+
+    activateKey(keyColor, sourceBlock) {
+        if (!keyColor) return [];
+
+        const unlockedBlocks = [];
+
+        for (const [id, block] of this.blocks) {
+            if (!block || block.isExiting) continue;
+
+            if (block.lockColor === keyColor && block.unlock && block.unlock()) {
+                unlockedBlocks.push(block);
+            }
+        }
+
+        if (unlockedBlocks.length > 0) {
+            this.playKeyActivationEffect(keyColor, sourceBlock, unlockedBlocks);
+            this.recalculateAllStates();
+        }
+
+        return unlockedBlocks;
+    }
+
+    playKeyActivationEffect(keyColor, sourceBlock, unlockedBlocks) {
+        if (!this.scene || !sourceBlock) return;
+
+        const color = (window.COLORS[keyColor] && window.COLORS[keyColor].hex) || 0xFFFFFF;
+        const source = sourceBlock.getScreenCenter ? sourceBlock.getScreenCenter() : null;
+        if (!source) return;
+
+        const flash = this.scene.add.circle(source.x, source.y, 14, 0xFFFFFF, 0.9);
+        flash.setDepth(86);
+
+        this.scene.tweens.add({
+            targets: flash,
+            scaleX: 2.2,
+            scaleY: 2.2,
+            alpha: 0,
+            duration: 220,
+            ease: 'Quad.easeOut',
+            onComplete: () => flash.destroy(),
+        });
+
+        const particles = this.scene.add.particles(source.x, source.y, 'particle_star', {
+            speed: { min: 80, max: 190 },
+            scale: { start: 0.6, end: 0 },
+            lifespan: 360,
+            quantity: 18,
+            tint: color,
+        });
+
+        particles.setDepth(85);
+        this.scene.time.delayedCall(420, () => {
+            if (particles && particles.destroy) particles.destroy();
+        });
+
+        unlockedBlocks.forEach((block, index) => {
+            if (!block || !block.getScreenCenter) return;
+            const target = block.getScreenCenter();
+            const line = this.scene.add.graphics();
+            line.setDepth(84);
+            line.lineStyle(3, color, 0.85);
+            line.beginPath();
+            line.moveTo(source.x, source.y);
+            line.lineTo(target.x, target.y);
+            line.strokePath();
+
+            this.scene.tweens.add({
+                targets: line,
+                alpha: 0,
+                duration: 280,
+                delay: 70 + index * 45,
+                ease: 'Quad.easeOut',
+                onComplete: () => line.destroy(),
+            });
+        });
+    }
 
     getVisibleBlocks() {
         const result = [];

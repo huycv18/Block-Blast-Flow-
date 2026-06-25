@@ -357,13 +357,86 @@
             return true;
         }
 
+        setSelectedBlockKeyColor(color) {
+            const record = this.getSelectedBlockRecord();
+
+            if (!record) {
+                this.showToast('Select a block first', true);
+                return false;
+            }
+
+            if (color) {
+                record.block.keyColor = color;
+                delete record.block.lockColor;
+            } else {
+                delete record.block.keyColor;
+            }
+
+            this.renderAll();
+            this.showToast(color
+                ? `${record.block.id} key set to ${color}`
+                : `${record.block.id} key cleared`);
+
+            return true;
+        }
+
+        setSelectedBlockLockColor(color) {
+            const record = this.getSelectedBlockRecord();
+
+            if (!record) {
+                this.showToast('Select a block first', true);
+                return false;
+            }
+
+            if (color) {
+                record.block.lockColor = color;
+                delete record.block.keyColor;
+            } else {
+                delete record.block.lockColor;
+            }
+
+            this.renderAll();
+            this.showToast(color
+                ? `${record.block.id} lock set to ${color}`
+                : `${record.block.id} lock cleared`);
+
+            return true;
+        }
+
+        getKeyLockMatchWarnings() {
+            const keyColors = new Set();
+            const lockColors = new Set();
+
+            for (const layer of this.levelData.layers) {
+                for (const block of layer.blocks || []) {
+                    if (block.keyColor) keyColors.add(block.keyColor);
+                    if (block.lockColor) lockColors.add(block.lockColor);
+                }
+            }
+
+            const warnings = [];
+
+            for (const color of keyColors) {
+                if (!lockColors.has(color)) warnings.push(`Key ${color} has no matching lock`);
+            }
+
+            for (const color of lockColors) {
+                if (!keyColors.has(color)) warnings.push(`Lock ${color} has no matching key`);
+            }
+
+            return warnings;
+        }
+
         updateFrozenPanel() {
             const label = document.getElementById('frozen-selected-label');
             const input = document.getElementById('input-frozen-count');
             const applyBtn = document.getElementById('btn-apply-frozen');
             const clearBtn = document.getElementById('btn-clear-frozen');
+            const keySelect = document.getElementById('select-key-color');
+            const lockSelect = document.getElementById('select-lock-color');
+            const warning = document.getElementById('key-lock-warning');
 
-            if (!label || !input || !applyBtn || !clearBtn) return;
+            if (!label || !input || !applyBtn || !clearBtn || !keySelect || !lockSelect) return;
 
             const record = this.getSelectedBlockRecord();
             const hasSelection = !!record;
@@ -371,16 +444,24 @@
             input.disabled = !hasSelection;
             applyBtn.disabled = !hasSelection;
             clearBtn.disabled = !hasSelection;
+            keySelect.disabled = !hasSelection;
+            lockSelect.disabled = !hasSelection;
 
             if (!record) {
-                label.textContent = 'Select a block to set ice count.';
+                label.textContent = 'Select a block to edit properties.';
                 input.value = '0';
+                keySelect.value = '';
+                lockSelect.value = '';
+                if (warning) warning.textContent = this.getKeyLockMatchWarnings().join('. ');
                 return;
             }
 
             const count = Math.max(0, parseInt(record.block.frozenCount || 0, 10) || 0);
             label.textContent = `Selected ${record.block.id} on L${record.layerIndex}`;
             input.value = String(count);
+            keySelect.value = record.block.keyColor || '';
+            lockSelect.value = record.block.lockColor || '';
+            if (warning) warning.textContent = this.getKeyLockMatchWarnings().join('. ');
         }
 
         canPlaceBlock(shape, row, col, excludeBlockId) {
@@ -438,9 +519,33 @@
         initUI() {
             this.buildColorGrid();
             this.buildShapeGrid();
+            this.buildKeyLockSelects();
             this.renderLayers();
             this.renderCarsConfig();
             this.renderValidation();
+        }
+
+        buildKeyLockSelects() {
+            const selects = [
+                document.getElementById('select-key-color'),
+                document.getElementById('select-lock-color'),
+            ].filter(Boolean);
+
+            for (const select of selects) {
+                select.innerHTML = '';
+
+                const none = document.createElement('option');
+                none.value = '';
+                none.textContent = 'none';
+                select.appendChild(none);
+
+                for (const color of COLOR_NAMES) {
+                    const option = document.createElement('option');
+                    option.value = color;
+                    option.textContent = color;
+                    select.appendChild(option);
+                }
+            }
         }
 
         buildColorGrid() {
@@ -793,6 +898,25 @@
                 container.innerHTML = '<div style="font-size:12px;color:#6666888;">No blocks or cars yet</div>';
             }
 
+            const keyLockWarnings = this.getKeyLockMatchWarnings();
+            for (const message of keyLockWarnings) {
+                allPass = false;
+
+                const row = document.createElement('div');
+                row.className = 'validation-row fail key-lock-validation';
+
+                const icon = document.createElement('span');
+                icon.className = 'v-icon';
+                icon.textContent = '!';
+                row.appendChild(icon);
+
+                const text = document.createElement('span');
+                text.textContent = message;
+                row.appendChild(text);
+
+                container.appendChild(row);
+            }
+
             // Update status dot
             const dot = document.getElementById('status-dot');
             dot.className = 'status-dot' + (allPass && allColors.size > 0 ? '' : ' error');
@@ -973,6 +1097,40 @@
                 ctx.globalAlpha = 1;
             }
 
+            if ((block.keyColor || block.lockColor) && cells.length > 0) {
+                const validCells = cells.filter(c => c.row >= 0 && c.row < GRID_ROWS && c.col >= 0 && c.col < GRID_COLS);
+                if (validCells.length > 0) {
+                    const minCol = Math.min(...validCells.map(c => c.col));
+                    const maxCol = Math.max(...validCells.map(c => c.col));
+                    const minRow = Math.min(...validCells.map(c => c.row));
+                    const maxRow = Math.max(...validCells.map(c => c.row));
+
+                    if (block.lockColor) {
+                        this.drawMetaBadge(
+                            ctx,
+                            GRID_PAD + (maxCol + 1) * CELL_PX - 12,
+                            GRID_PAD + minRow * CELL_PX + 12,
+                            block.lockColor,
+                            'L',
+                            alpha,
+                            '#FFFFFF'
+                        );
+                    }
+
+                    if (block.keyColor) {
+                        this.drawMetaBadge(
+                            ctx,
+                            GRID_PAD + (maxCol + 1) * CELL_PX - 12,
+                            GRID_PAD + (maxRow + 1) * CELL_PX - 12,
+                            block.keyColor,
+                            'K',
+                            alpha,
+                            '#F7DC6F'
+                        );
+                    }
+                }
+            }
+
             // Block ID label (on first cell)
             if (cells.length > 0) {
                 const c0 = cells[0];
@@ -985,6 +1143,23 @@
                 ctx.fillText(block.id, x0 + 4, y0 + 13);
                 ctx.globalAlpha = 1;
             }
+        }
+
+        drawMetaBadge(ctx, cx, cy, colorName, text, alpha, strokeStyle) {
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = hexToCSS(COLORS[colorName]?.hex || 0x888888);
+            ctx.strokeStyle = strokeStyle;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 10px Outfit';
+            ctx.textAlign = 'center';
+            ctx.fillText(text, cx, cy + 4);
+            ctx.globalAlpha = 1;
         }
 
         drawPreview(ctx, row, col) {
@@ -1179,6 +1354,14 @@
                 this.setSelectedBlockFrozenCount(0);
             });
 
+            document.getElementById('select-key-color').addEventListener('change', (e) => {
+                this.setSelectedBlockKeyColor(e.target.value || null);
+            });
+
+            document.getElementById('select-lock-color').addEventListener('change', (e) => {
+                this.setSelectedBlockLockColor(e.target.value || null);
+            });
+
             // Header buttons
             document.getElementById('btn-new').addEventListener('click', () => {
                 if (!confirm('Create new level? Current data will be lost.')) return;
@@ -1261,6 +1444,13 @@
             const data = JSON.parse(JSON.stringify(this.levelData));
             // Clean up: ensure ids are unique, sort layers and cars
             data.layers.sort((a, b) => a.index - b.index);
+            for (const layer of data.layers) {
+                for (const block of layer.blocks || []) {
+                    if (!COLOR_NAMES.includes(block.keyColor)) delete block.keyColor;
+                    if (!COLOR_NAMES.includes(block.lockColor)) delete block.lockColor;
+                    if (block.keyColor && block.lockColor) delete block.lockColor;
+                }
+            }
             data.cars.sort((a, b) => a.column - b.column || a.queueOrder - b.queueOrder);
             return JSON.stringify(data, null, 4);
         }
@@ -1333,6 +1523,18 @@
                         block.frozenCount = frozen;
                     } else {
                         delete block.frozenCount;
+                    }
+
+                    if (!COLOR_NAMES.includes(block.keyColor)) {
+                        delete block.keyColor;
+                    }
+
+                    if (!COLOR_NAMES.includes(block.lockColor)) {
+                        delete block.lockColor;
+                    }
+
+                    if (block.keyColor && block.lockColor) {
+                        delete block.lockColor;
                     }
                 }
             }
@@ -1501,9 +1703,15 @@
             const frozenText = selected && selected.block.frozenCount > 0
                 ? ` | Frozen ${selected.block.frozenCount}`
                 : '';
+            const keyText = selected && selected.block.keyColor
+                ? ` | Key ${selected.block.keyColor}`
+                : '';
+            const lockText = selected && selected.block.lockColor
+                ? ` | Lock ${selected.block.lockColor}`
+                : '';
             document.getElementById('status-blocks').textContent = `Blocks: ${totalBlocks}`;
             document.getElementById('status-selection').textContent =
-                `Tool: ${this.tool} | ${this.selectedColor} ${this.selectedShape} | Layer ${this.activeLayer}${frozenText}`;
+                `Tool: ${this.tool} | ${this.selectedColor} ${this.selectedShape} | Layer ${this.activeLayer}${frozenText}${keyText}${lockText}`;
         }
 
         showToast(msg, isError) {
