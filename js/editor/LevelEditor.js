@@ -25,34 +25,6 @@
         return `rgba(${r},${g},${b},${a})`;
     }
 
-    // ─── Level data URL encoding (avoids file:// localStorage cross-tab issues) ───
-    // Encodes level JSON as a URL-safe base64 string so the game tab can read it
-    // straight from its own URL, without depending on localStorage being shared
-    // between the editor tab and the test tab (which fails under file:// origins).
-    const MAX_URL_LEVEL_LENGTH = 1800; // keep total URL well under browser limits
-
-    function encodeLevelForURL(levelObj) {
-        const json = JSON.stringify(levelObj);
-        // Unicode-safe base64 (handles Vietnamese names, emoji, etc.)
-        const bytes = new TextEncoder().encode(json);
-        let binary = '';
-        for (const byte of bytes) binary += String.fromCharCode(byte);
-        const b64 = btoa(binary);
-        // Make URL-safe: replace +/= which need escaping in query strings
-        return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    }
-
-    function decodeLevelFromURL(encoded) {
-        // Restore standard base64 from URL-safe variant
-        let b64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
-        while (b64.length % 4 !== 0) b64 += '=';
-        const binary = atob(b64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const json = new TextDecoder().decode(bytes);
-        return JSON.parse(json);
-    }
-
     // ─── Main Editor Class ───
     class LevelEditor {
         constructor() {
@@ -114,6 +86,179 @@
                 }
             }
             return blocks;
+        }
+
+        getBlockCubeCount(block) {
+            const shape = SHAPES[block.shape];
+            if (!shape) return 0;
+            return shape.unitCount * (CONFIG.CUBES_PER_CELL || 4);
+        }
+
+        getHighestNonEmptyLayer() {
+            return [...this.levelData.layers]
+                .filter(layer => layer.blocks && layer.blocks.length > 0)
+                .sort((a, b) => b.index - a.index)[0] || null;
+        }
+
+        getAutoCarStats() {
+            const stats = {};
+            const ensureColor = (color) => {
+                if (!stats[color]) {
+                    stats[color] = {
+                        color,
+                        totalBlocks: 0,
+                        totalCubes: 0,
+                        topBlocks: 0,
+                        topCubes: 0,
+                    };
+                }
+                return stats[color];
+            };
+
+            const topLayer = this.getHighestNonEmptyLayer();
+            const topLayerIndex = topLayer ? topLayer.index : null;
+
+            for (const layer of this.levelData.layers) {
+                for (const block of layer.blocks || []) {
+                    const colorStats = ensureColor(block.color);
+                    const cubes = this.getBlockCubeCount(block);
+                    colorStats.totalBlocks += 1;
+                    colorStats.totalCubes += cubes;
+
+                    if (layer.index === topLayerIndex) {
+                        colorStats.topBlocks += 1;
+                        colorStats.topCubes += cubes;
+                    }
+                }
+            }
+
+            const priority = Object.values(stats).sort((a, b) => {
+                // Main GDD priority: colors with more blocks on the highest non-empty layer go first.
+                if (b.topBlocks !== a.topBlocks) return b.topBlocks - a.topBlocks;
+                if (b.topCubes !== a.topCubes) return b.topCubes - a.topCubes;
+                if (b.totalBlocks !== a.totalBlocks) return b.totalBlocks - a.totalBlocks;
+                if (b.totalCubes !== a.totalCubes) return b.totalCubes - a.totalCubes;
+                return COLOR_NAMES.indexOf(a.color) - COLOR_NAMES.indexOf(b.color);
+            });
+
+            return { topLayerIndex, priority, stats };
+        }
+
+        getAutoCarPriorityText() {
+            const { topLayerIndex, priority } = this.getAutoCarStats();
+            if (!priority.length) return 'No blocks yet';
+
+            const topColors = priority.filter(item => item.topBlocks > 0);
+            const source = topColors.length ? topColors : priority;
+            const parts = source.map(item => `${item.color}×${item.topBlocks || item.totalBlocks}`);
+            const layerText = topLayerIndex !== null ? `Top L${topLayerIndex}` : 'No layer';
+            return `${layerText}: ${parts.join(', ')}`;
+        }
+
+        normalizeCarQueueOrders() {
+            const normalized = [];
+            for (let col = 0; col < 3; col++) {
+                const carsInCol = this.levelData.cars
+                    .filter(car => car.column === col)
+                    .sort((a, b) => (a.queueOrder || 0) - (b.queueOrder || 0));
+
+                carsInCol.forEach((car, index) => {
+                    car.column = col;
+                    car.queueOrder = index;
+                    normalized.push(car);
+                });
+            }
+
+            // Keep unexpected columns instead of silently deleting imported data.
+            const external = this.levelData.cars.filter(car => car.column < 0 || car.column > 2);
+            this.levelData.cars = [...normalized, ...external];
+        }
+
+        getSortedCarsInColumn(column, carPool) {
+            const cars = carPool || this.levelData.cars;
+            return cars
+                .filter(car => car.column === column)
+                .sort((a, b) => (a.queueOrder || 0) - (b.queueOrder || 0));
+        }
+
+        moveCarToPosition(sourceIndex, targetColumn, targetPosition) {
+            const car = this.levelData.cars[sourceIndex];
+            if (!car || targetColumn < 0 || targetColumn > 2) return false;
+
+            const remainingCars = this.levelData.cars.filter(candidate => candidate !== car);
+            const columns = [0, 1, 2].map(col => this.getSortedCarsInColumn(col, remainingCars));
+
+            const targetList = columns[targetColumn];
+            const safePosition = Math.max(0, Math.min(targetPosition, targetList.length));
+            car.column = targetColumn;
+            targetList.splice(safePosition, 0, car);
+
+            const normalized = [];
+            for (let col = 0; col < 3; col++) {
+                columns[col].forEach((item, index) => {
+                    item.column = col;
+                    item.queueOrder = index;
+                    normalized.push(item);
+                });
+            }
+
+            const external = remainingCars.filter(item => item.column < 0 || item.column > 2);
+            this.levelData.cars = [...normalized, ...external];
+            return true;
+        }
+
+        getCarDropIndex(listEl, clientY) {
+            const items = [...listEl.querySelectorAll('.car-item:not(.dragging)')];
+            let closestOffset = Number.NEGATIVE_INFINITY;
+            let closestIndex = items.length;
+
+            items.forEach((item, index) => {
+                const box = item.getBoundingClientRect();
+                const offset = clientY - box.top - box.height / 2;
+                if (offset < 0 && offset > closestOffset) {
+                    closestOffset = offset;
+                    closestIndex = index;
+                }
+            });
+
+            return closestIndex;
+        }
+
+        autoGenerateCarsFromBlocks() {
+            const { priority } = this.getAutoCarStats();
+            if (!priority.length) {
+                this.showToast('Add blocks first before auto-generating cars', true);
+                return;
+            }
+
+            if (this.levelData.cars.length > 0) {
+                const ok = confirm('Auto Cars will replace the current car list. Continue?');
+                if (!ok) return;
+            }
+
+            const defaultCapacity = 8;
+            const generated = [];
+
+            for (const item of priority) {
+                let remaining = item.totalCubes;
+                while (remaining > 0) {
+                    const capacity = Math.min(defaultCapacity, remaining);
+                    const index = generated.length;
+                    generated.push({
+                        column: index % 3,
+                        color: item.color,
+                        capacity,
+                        queueOrder: Math.floor(index / 3),
+                    });
+                    remaining -= capacity;
+                }
+            }
+
+            this.levelData.cars = generated;
+            this.normalizeCarQueueOrders();
+            this.renderCarsConfig();
+            this.renderValidation();
+            this.showToast(`Auto-created ${generated.length} cars from top-layer priority`);
         }
 
         getBlockCells(block) {
@@ -311,6 +456,21 @@
         renderCarsConfig() {
             const container = document.getElementById('cars-config');
             container.innerHTML = '';
+            this.normalizeCarQueueOrders();
+
+            const toolbar = document.createElement('div');
+            toolbar.className = 'cars-toolbar';
+            toolbar.innerHTML = `
+                <button class="btn btn-primary btn-sm" id="btn-auto-cars" title="Create cars from block colors, prioritizing the highest non-empty layer">⚙ Auto Cars</button>
+                <span class="auto-cars-hint">${this.getAutoCarPriorityText()}</span>
+            `;
+            toolbar.querySelector('#btn-auto-cars').addEventListener('click', () => this.autoGenerateCarsFromBlocks());
+            container.appendChild(toolbar);
+
+            const help = document.createElement('div');
+            help.className = 'cars-drag-help';
+            help.textContent = 'Drag cars to reorder queue or move between columns. Q0 is the active/front car.';
+            container.appendChild(help);
 
             for (let col = 0; col < 3; col++) {
                 const group = document.createElement('div');
@@ -326,15 +486,54 @@
 
                 const list = document.createElement('div');
                 list.className = 'car-list';
+                list.dataset.column = col;
 
-                const carsInCol = this.levelData.cars
-                    .filter(c => c.column === col)
-                    .sort((a, b) => a.queueOrder - b.queueOrder);
+                list.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    list.classList.add('drag-over');
+                });
+                list.addEventListener('dragleave', (e) => {
+                    if (!list.contains(e.relatedTarget)) list.classList.remove('drag-over');
+                });
+                list.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    list.classList.remove('drag-over');
+                    const sourceIndex = parseInt(e.dataTransfer.getData('text/plain'));
+                    if (Number.isNaN(sourceIndex)) return;
+                    const targetColumn = parseInt(list.dataset.column);
+                    const targetPosition = this.getCarDropIndex(list, e.clientY);
+                    if (this.moveCarToPosition(sourceIndex, targetColumn, targetPosition)) {
+                        this.renderCarsConfig();
+                        this.renderValidation();
+                        this.showToast('Car order updated');
+                    }
+                });
+
+                const carsInCol = this.getSortedCarsInColumn(col);
 
                 for (let i = 0; i < carsInCol.length; i++) {
                     const car = carsInCol[i];
+                    const carIndex = this.levelData.cars.indexOf(car);
                     const item = document.createElement('div');
                     item.className = 'car-item';
+                    item.draggable = true;
+                    item.dataset.carIndex = carIndex;
+                    item.title = 'Drag to reorder this car';
+
+                    item.addEventListener('dragstart', (e) => {
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', String(carIndex));
+                        item.classList.add('dragging');
+                    });
+                    item.addEventListener('dragend', () => {
+                        item.classList.remove('dragging');
+                        container.querySelectorAll('.car-list.drag-over').forEach(el => el.classList.remove('drag-over'));
+                    });
+
+                    const handle = document.createElement('span');
+                    handle.className = 'car-drag-handle';
+                    handle.textContent = '☰';
+                    item.appendChild(handle);
 
                     const dot = document.createElement('div');
                     dot.className = 'car-color-dot';
@@ -355,6 +554,7 @@
                         dot.style.background = hexToCSS(COLORS[car.color].hex);
                         this.renderValidation();
                     });
+                    colorSel.addEventListener('mousedown', (e) => e.stopPropagation());
                     item.appendChild(colorSel);
 
                     // Capacity input
@@ -367,11 +567,12 @@
                         car.capacity = parseInt(capInput.value) || 4;
                         this.renderValidation();
                     });
+                    capInput.addEventListener('mousedown', (e) => e.stopPropagation());
                     item.appendChild(capInput);
 
                     // Queue label
                     const qLabel = document.createElement('span');
-                    qLabel.style.cssText = 'font-size:10px;color:#9999b8;';
+                    qLabel.className = 'car-queue-label';
                     qLabel.textContent = `Q${car.queueOrder}`;
                     item.appendChild(qLabel);
 
@@ -382,6 +583,7 @@
                     del.addEventListener('click', () => {
                         const idx = this.levelData.cars.indexOf(car);
                         if (idx !== -1) this.levelData.cars.splice(idx, 1);
+                        this.normalizeCarQueueOrders();
                         this.renderCarsConfig();
                         this.renderValidation();
                     });
@@ -403,6 +605,7 @@
                         capacity: 8,
                         queueOrder: nextQueue,
                     });
+                    this.normalizeCarQueueOrders();
                     this.renderCarsConfig();
                     this.renderValidation();
                 });
@@ -664,6 +867,7 @@
         renderAll() {
             this.renderGrid();
             this.renderLayers();
+            this.renderCarsConfig();
             this.renderValidation();
             this.updateStatusBar();
         }
@@ -850,14 +1054,6 @@
 
             // Initial bank list render
             this.renderBankList();
-
-            // Level Pick Modal — close handlers
-            document.getElementById('level-pick-close').addEventListener('click', () => {
-                this.closeLevelPickModal();
-            });
-            document.getElementById('level-pick-modal').addEventListener('click', (e) => {
-                if (e.target.id === 'level-pick-modal') this.closeLevelPickModal();
-            });
         }
 
         // ───────────────────────────────────────
@@ -880,9 +1076,11 @@
         // ───────────────────────────────────────
 
         getLevelJSON() {
+            this.normalizeCarQueueOrders();
             const data = JSON.parse(JSON.stringify(this.levelData));
-            // Clean up: ensure ids are unique, sort layers
+            // Clean up: ensure ids are unique, sort layers and cars
             data.layers.sort((a, b) => a.index - b.index);
+            data.cars.sort((a, b) => a.column - b.column || a.queueOrder - b.queueOrder);
             return JSON.stringify(data, null, 4);
         }
 
@@ -932,7 +1130,14 @@
             }
 
             this.levelData = data;
+            this.levelData.conveyorCapacity ??= CONFIG.CONVEYOR_CAPACITY;
+            this.levelData.funnelCapacity ??= CONFIG.FUNNEL_CAPACITY;
+            this.levelData.boosters ??= { magnet: 10, shuffle: 10, paintGun: 10 };
+            this.levelData.boosters.magnet ??= 10;
+            this.levelData.boosters.shuffle ??= 10;
+            this.levelData.boosters.paintGun ??= 10;
             this.activeLayer = data.layers[0]?.index || 0;
+            this.normalizeCarQueueOrders();
 
             // Recalculate blockIdCounter
             let maxId = 0;
@@ -952,54 +1157,10 @@
         }
 
         playTest() {
-            this.openLevelPickModal();
-        }
-
-        // ───────────────────────────────────────
-        // Play Test: Level Picker Modal
-        // ───────────────────────────────────────
-
-        openLevelPickModal() {
-            this.renderLevelPickList();
-            document.getElementById('level-pick-modal').classList.add('show');
-        }
-
-        closeLevelPickModal() {
-            document.getElementById('level-pick-modal').classList.remove('show');
-        }
-
-        renderLevelPickList() {
-            const container = document.getElementById('level-pick-list');
-            container.innerHTML = '';
-            const bank = this.getLevelBank();
-
-            if (bank.length === 0) {
-                container.innerHTML = `
-                    <div class="modal-empty-state">
-                        Chưa có Level nào trong Bank.<br>
-                        Hãy bấm "💾 Save to Bank" để lưu Level hiện tại trước.
-                    </div>`;
-                return;
-            }
-
-            for (const level of bank) {
-                const totalBlocks = level.layers.reduce((sum, l) => sum + l.blocks.length, 0);
-                const item = document.createElement('div');
-                item.className = 'level-pick-item';
-                item.innerHTML = `
-                    <span class="level-pick-id">#${level.id}</span>
-                    <span class="level-pick-info">
-                        <div class="level-pick-name">${level.name || 'Untitled'}</div>
-                        <div class="level-pick-meta">${totalBlocks} blocks · ${level.difficulty || ''}</div>
-                    </span>
-                    <span class="level-pick-arrow">▶</span>
-                `;
-                item.addEventListener('click', () => {
-                    this.closeLevelPickModal();
-                    this.playTestForLevel(level.id);
-                });
-                container.appendChild(item);
-            }
+            const json = this.getLevelJSON();
+            localStorage.setItem('editorTestLevel', json);
+            window.open('index.html?testLevel=1', '_blank');
+            this.showToast('Play test opened in new tab');
         }
 
         // ───────────────────────────────────────
@@ -1015,13 +1176,7 @@
         }
 
         saveLevelBank(bank) {
-            try {
-                localStorage.setItem('levelBank', JSON.stringify(bank));
-                return true;
-            } catch (e) {
-                console.warn('[LevelEditor] Could not save to localStorage:', e);
-                return false;
-            }
+            localStorage.setItem('levelBank', JSON.stringify(bank));
         }
 
         saveToBank() {
@@ -1030,13 +1185,6 @@
             const existingIdx = bank.findIndex(l => l.id === levelCopy.id);
 
             if (existingIdx !== -1) {
-                const confirmed = confirm(
-                    `Level ${levelCopy.id} đã tồn tại trong Bank.\nBạn có muốn ghi đè (overwrite) không?`
-                );
-                if (!confirmed) {
-                    this.showToast('Đã huỷ — Level chưa được lưu', true);
-                    return;
-                }
                 bank[existingIdx] = levelCopy;
                 this.showToast(`Level ${levelCopy.id} updated in Bank`);
             } else {
@@ -1045,14 +1193,7 @@
             }
 
             bank.sort((a, b) => a.id - b.id);
-            const saved = this.saveLevelBank(bank);
-            if (!saved) {
-                this.showToast(
-                    '⚠️ Không thể lưu vào Bank (localStorage bị chặn). ' +
-                    'Hãy dùng "💾 Export JSON" để lưu file trực tiếp.',
-                    true
-                );
-            }
+            this.saveLevelBank(bank);
             this.renderBankList();
         }
 
@@ -1081,16 +1222,8 @@
                 this.showToast('Bank is empty — save some levels first', true);
                 return;
             }
-            try {
-                localStorage.setItem('customLevels', JSON.stringify(bank));
-                this.showToast(`${bank.length} levels sent to Game! Refresh game to play.`);
-            } catch (e) {
-                this.showToast(
-                    '⚠️ Không gửi được (localStorage bị chặn, thường do mở file trực tiếp file://). ' +
-                    'Hãy dùng "📄 Export levels.js" rồi thay file js/data/levels.js.',
-                    true
-                );
-            }
+            localStorage.setItem('customLevels', JSON.stringify(bank));
+            this.showToast(`${bank.length} levels sent to Game! Refresh game to play.`);
         }
 
         generateLevelsJS() {
@@ -1137,7 +1270,7 @@
                 container.appendChild(el);
             }
 
-            container.addEventListener('click', (e) => {
+            container.onclick = (e) => {
                 const playBtn = e.target.closest('.bank-play');
                 const loadBtn = e.target.closest('.bank-load');
                 const delBtn = e.target.closest('.bank-delete');
@@ -1150,50 +1283,16 @@
                         this.deleteFromBank(parseInt(delBtn.dataset.id));
                     }
                 }
-            });
+            };
         }
 
         playTestForLevel(levelId) {
             const bank = this.getLevelBank();
             const level = bank.find(l => l.id === levelId);
             if (!level) return;
-            this.openTestTabForLevel(level, levelId);
-        }
-
-        /**
-         * Open a new tab to play-test a given level.
-         *
-         * Primary path: encode the level JSON straight into the URL (base64,
-         * URL-safe). This works regardless of origin — including file:// —
-         * because the data travels with the URL itself instead of relying on
-         * localStorage being shared between the editor tab and the new tab
-         * (which is unreliable under file:// origins).
-         *
-         * Fallback: if the encoded level would make the URL too long (very
-         * large levels), fall back to localStorage + a short marker, since
-         * most browsers DO share localStorage across tabs of the exact same
-         * file:// path even though cross-tab timing can be unreliable.
-         */
-        openTestTabForLevel(level, levelId) {
-            const encoded = encodeLevelForURL(level);
-
-            if (encoded.length <= MAX_URL_LEVEL_LENGTH) {
-                window.open(`index.html?testLevelData=${encoded}`, '_blank');
-                this.showToast(`Play testing Level ${levelId}...`);
-            } else {
-                // Level too large to fit safely in a URL — try localStorage fallback
-                try {
-                    localStorage.setItem('editorTestLevel', JSON.stringify(level));
-                    window.open('index.html?testLevel=1', '_blank');
-                    this.showToast(`Level ${levelId} quá lớn cho URL — dùng localStorage (có thể không hoạt động với file://)`, true);
-                } catch (e) {
-                    this.showToast(
-                        `⚠️ Level ${levelId} quá lớn để test (vượt giới hạn URL và localStorage bị chặn trên file://). ` +
-                        'Hãy thử chạy qua local server (vd: Vite/Live Server) thay vì mở file trực tiếp.',
-                        true
-                    );
-                }
-            }
+            localStorage.setItem('editorTestLevel', JSON.stringify(level));
+            window.open('index.html?testLevel=1', '_blank');
+            this.showToast(`Play testing Level ${levelId}...`);
         }
 
         // ───────────────────────────────────────

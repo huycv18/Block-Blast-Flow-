@@ -697,134 +697,69 @@ input[type="number"]::-webkit-outer-spin-button {
 .bank-load:hover { opacity: 1; }
 .bank-delete:hover { opacity: 1; color: var(--danger); }
 
-/* --- Play Test: Level Picker Modal --- */
-.modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(10, 10, 20, 0.65);
+/* --- Auto Cars + Drag/Drop --- */
+.cars-toolbar {
     display: flex;
     align-items: center;
-    justify-content: center;
-    z-index: 2000;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.18s ease;
-}
-
-.modal-overlay.show {
-    opacity: 1;
-    pointer-events: auto;
-}
-
-.modal-box {
-    width: 380px;
-    max-height: 70vh;
-    background: var(--bg-panel);
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-panel);
-    display: flex;
-    flex-direction: column;
-    transform: translateY(10px) scale(0.98);
-    transition: transform 0.18s ease;
-}
-
-.modal-overlay.show .modal-box {
-    transform: translateY(0) scale(1);
-}
-
-.modal-box-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 18px;
-    border-bottom: 1px solid var(--border);
-}
-
-.modal-box-header h2 {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text);
-}
-
-.modal-box-close {
-    cursor: pointer;
-    color: var(--text-dim);
-    font-size: 16px;
-    line-height: 1;
-    padding: 2px 6px;
-    border-radius: var(--radius-sm);
-    transition: var(--transition);
-}
-
-.modal-box-close:hover {
-    background: var(--bg-card-hover);
-    color: var(--text);
-}
-
-.modal-box-body {
-    padding: 12px 14px;
-    overflow-y: auto;
-    flex: 1;
-}
-
-.modal-empty-state {
-    font-size: 13px;
-    color: var(--text-muted);
-    text-align: center;
-    padding: 24px 8px;
-}
-
-.level-pick-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
+    gap: 8px;
     margin-bottom: 6px;
-    cursor: pointer;
-    transition: var(--transition);
 }
 
-.level-pick-item:hover {
-    background: var(--bg-card-hover);
-    border-color: var(--accent);
-}
-
-.level-pick-id {
-    font-family: 'JetBrains Mono', monospace;
-    font-weight: 700;
-    font-size: 13px;
-    color: var(--accent-light);
-    background: var(--bg-input);
-    border-radius: var(--radius-sm);
-    padding: 4px 8px;
-    min-width: 32px;
-    text-align: center;
-}
-
-.level-pick-info {
+.auto-cars-hint {
     flex: 1;
-    overflow: hidden;
-}
-
-.level-pick-name {
-    font-size: 13px;
-    color: var(--text);
+    min-width: 0;
+    color: var(--text-dim);
+    font-size: 11px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.level-pick-meta {
-    font-size: 11px;
+.cars-drag-help {
     color: var(--text-muted);
-    margin-top: 2px;
+    font-size: 10.5px;
+    line-height: 1.25;
+    margin-bottom: 10px;
 }
 
-.level-pick-arrow {
+.car-list {
+    min-height: 30px;
+    padding: 3px;
+    border-radius: var(--radius-sm);
+    transition: background var(--transition), outline-color var(--transition);
+}
+
+.car-list.drag-over {
+    background: rgba(74, 123, 217, 0.11);
+    outline: 1px dashed var(--accent-light);
+    outline-offset: 2px;
+}
+
+.car-item {
+    cursor: grab;
+}
+
+.car-item:active {
+    cursor: grabbing;
+}
+
+.car-item.dragging {
+    opacity: 0.45;
+    border-color: var(--accent-light);
+    box-shadow: 0 0 12px var(--accent-glow);
+}
+
+.car-drag-handle {
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: 12px;
+    line-height: 1;
+    cursor: grab;
+    user-select: none;
+}
+
+.car-queue-label {
+    min-width: 20px;
+    font-size: 10px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
 }
