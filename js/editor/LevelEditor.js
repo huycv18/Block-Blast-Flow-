@@ -822,6 +822,14 @@
 
             // Initial bank list render
             this.renderBankList();
+
+            // Level Pick Modal — close handlers
+            document.getElementById('level-pick-close').addEventListener('click', () => {
+                this.closeLevelPickModal();
+            });
+            document.getElementById('level-pick-modal').addEventListener('click', (e) => {
+                if (e.target.id === 'level-pick-modal') this.closeLevelPickModal();
+            });
         }
 
         // ───────────────────────────────────────
@@ -916,10 +924,54 @@
         }
 
         playTest() {
-            const json = this.getLevelJSON();
-            localStorage.setItem('editorTestLevel', json);
-            window.open('index.html?testLevel=1', '_blank');
-            this.showToast('Play test opened in new tab');
+            this.openLevelPickModal();
+        }
+
+        // ───────────────────────────────────────
+        // Play Test: Level Picker Modal
+        // ───────────────────────────────────────
+
+        openLevelPickModal() {
+            this.renderLevelPickList();
+            document.getElementById('level-pick-modal').classList.add('show');
+        }
+
+        closeLevelPickModal() {
+            document.getElementById('level-pick-modal').classList.remove('show');
+        }
+
+        renderLevelPickList() {
+            const container = document.getElementById('level-pick-list');
+            container.innerHTML = '';
+            const bank = this.getLevelBank();
+
+            if (bank.length === 0) {
+                container.innerHTML = `
+                    <div class="modal-empty-state">
+                        Chưa có Level nào trong Bank.<br>
+                        Hãy bấm "💾 Save to Bank" để lưu Level hiện tại trước.
+                    </div>`;
+                return;
+            }
+
+            for (const level of bank) {
+                const totalBlocks = level.layers.reduce((sum, l) => sum + l.blocks.length, 0);
+                const item = document.createElement('div');
+                item.className = 'level-pick-item';
+                item.innerHTML = `
+                    <span class="level-pick-id">#${level.id}</span>
+                    <span class="level-pick-info">
+                        <div class="level-pick-name">${level.name || 'Untitled'}</div>
+                        <div class="level-pick-meta">${totalBlocks} blocks · ${level.difficulty || ''}</div>
+                    </span>
+                    <span class="level-pick-arrow">▶</span>
+                `;
+                item.addEventListener('click', () => {
+                    this.closeLevelPickModal();
+                    this.playTestForLevel(level.id);
+                });
+                container.appendChild(item);
+            }
         }
 
         // ───────────────────────────────────────
@@ -944,6 +996,13 @@
             const existingIdx = bank.findIndex(l => l.id === levelCopy.id);
 
             if (existingIdx !== -1) {
+                const confirmed = confirm(
+                    `Level ${levelCopy.id} đã tồn tại trong Bank.\nBạn có muốn ghi đè (overwrite) không?`
+                );
+                if (!confirmed) {
+                    this.showToast('Đã huỷ — Level chưa được lưu', true);
+                    return;
+                }
                 bank[existingIdx] = levelCopy;
                 this.showToast(`Level ${levelCopy.id} updated in Bank`);
             } else {
@@ -1081,4 +1140,3 @@
     });
 
 })();
-
