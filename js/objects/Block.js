@@ -6,6 +6,7 @@
 // - outlineGraphics removed.
 // - connectorGraphics draws same-color bridges between cells of the SAME block.
 // - connectorOverlayGraphics dims those bridges when the block is on lower layers / blocked.
+// - Layer overlay is based on visualLayerDepth, not raw layer index.
 // ============================================================
 
 window.Block = class Block {
@@ -22,29 +23,25 @@ window.Block = class Block {
         this.originRow = blockData.row;
         this.originCol = blockData.col;
 
-        // Absolute grid positions for each cell
+        // 0 = top visible layer, 1 = one layer below, etc.
+        // Board recalculates this after all block states are known.
+        this.visualLayerDepth = 0;
+
         this.cells = [];
         this.setCellPositions();
 
-        // Visual state
         this.state = 'pullable';
 
-        // Normal board depth: layer cao hơn nằm trên layer thấp khi idle.
-        // Resolve depth: khi block đang bị rút/lift/blast thì luôn nằm trên cùng gameplay.
         this.baseDepth = 10 + this.layer;
         this.resolveDepth = 45 + this.layer;
 
-        // Phaser container holding cell sprites
         this.container = null;
         this.cellSprites = [];
         this.glowSprites = [];
         this.overlaySprites = [];
 
-        // Visual helpers
         this.shadowGraphics = null;
         this.connectorGraphics = null;
-
-        // Overlay riêng cho connector, để phần nối cũng bị tối khi ở layer dưới/blocked.
         this.connectorOverlayGraphics = null;
 
         this.createVisuals(scene);
@@ -54,9 +51,6 @@ window.Block = class Block {
     // Cell position calculation
     // ----------------------------------------------------------
 
-    /**
-     * Calculate absolute grid positions from shape offsets + anchor row/col.
-     */
     setCellPositions() {
         const shapeDef = window.SHAPES[this.shapeName];
 
@@ -76,9 +70,6 @@ window.Block = class Block {
     // Visual creation
     // ----------------------------------------------------------
 
-    /**
-     * Create Phaser Container with cell sprites at screen coordinates.
-     */
     createVisuals(scene) {
         const C = window.CONFIG;
 
@@ -92,20 +83,14 @@ window.Block = class Block {
         this.glowSprites = [];
         this.overlaySprites = [];
 
-        // Shadow nằm sau toàn bộ block.
         this.shadowGraphics = scene.add.graphics();
         this.drawBlockShadow(C, anchorX, anchorY);
         sprites.push(this.shadowGraphics);
 
-        // Connector nằm dưới cell/glow.
-        // Chỉ vẽ cầu nối giữa các cell cùng Block, không phình ra ngoài cạnh ngoài.
         this.connectorGraphics = scene.add.graphics();
         this.drawBlockConnector(C, anchorX, anchorY);
         sprites.push(this.connectorGraphics);
 
-        // Overlay cho phần connector.
-        // Phải nằm sau connectorGraphics nhưng trước cellSprites,
-        // để chỉ làm tối phần nối, còn cellSprites vẫn dùng overlaySprites riêng.
         this.connectorOverlayGraphics = scene.add.graphics();
         this.drawBlockConnectorOverlay(C, anchorX, anchorY, 0);
         sprites.push(this.connectorOverlayGraphics);
@@ -114,13 +99,11 @@ window.Block = class Block {
             const cx = C.BOARD_OFFSET_X + cell.col * C.CELL_SIZE + C.CELL_SIZE / 2 - anchorX;
             const cy = C.BOARD_OFFSET_Y + cell.row * C.CELL_SIZE + C.CELL_SIZE / 2 - anchorY;
 
-            // Main cell sprite
             const cellSprite = scene.add.image(cx, cy, `cell_${this.color}`);
             cellSprite.setDisplaySize(C.CELL_DRAW, C.CELL_DRAW);
             this.cellSprites.push(cellSprite);
             sprites.push(cellSprite);
 
-            // Glow effect
             const glow = scene.add.image(cx, cy, `cell_${this.color}`);
             glow.setDisplaySize(C.CELL_DRAW + 4, C.CELL_DRAW + 4);
             glow.setAlpha(0.15);
@@ -128,37 +111,29 @@ window.Block = class Block {
             this.glowSprites.push(glow);
             sprites.push(glow);
 
-            // Dark overlay for blocked/layer state
             const overlay = scene.add.rectangle(cx, cy, C.CELL_DRAW, C.CELL_DRAW, 0x000000);
             overlay.setAlpha(0);
             this.overlaySprites.push(overlay);
             sprites.push(overlay);
         }
 
-        // Create container at anchor position
         this.container = scene.add.container(anchorX, anchorY, sprites);
 
-        // Apply layer overlay
-        const layerDim = C.LAYER_OVERLAYS[this.layer] || 0;
+        const layerDim = this.getLayerOverlayAlpha();
+
         if (layerDim > 0) {
             for (const overlay of this.overlaySprites) {
                 overlay.setAlpha(layerDim);
             }
+
+            this.updateConnectorOverlay(layerDim);
         }
 
-        this.updateConnectorOverlay(layerDim);
-
-        // Set idle depth by layer
         this.container.setDepth(this.getBaseDepth());
 
-        // Make interactive with hit area covering all cells
         this._setupInteractive(scene);
     }
 
-    /**
-     * Draw subtle shadow behind every cell of the block.
-     * Kept small so shadows do not visually overlap nearby blocks too much.
-     */
     drawBlockShadow(C, anchorX, anchorY) {
         if (!this.shadowGraphics) return;
 
@@ -168,7 +143,6 @@ window.Block = class Block {
 
         g.clear();
 
-        // Small soft shadow under each tile.
         g.fillStyle(0x000000, 0.14);
 
         for (const cell of this.cells) {
@@ -184,7 +158,6 @@ window.Block = class Block {
             );
         }
 
-        // Tiny contact shadow, only at the bottom.
         g.fillStyle(0x000000, 0.07);
 
         for (const cell of this.cells) {
@@ -201,15 +174,6 @@ window.Block = class Block {
         }
     }
 
-    /**
-     * Draw same-color connector layer only BETWEEN adjacent cells.
-     * Connector width equals the 1x1 block visual width, so multi-cell
-     * shapes look like one connected piece.
-     *
-     * It still does not draw outside the block silhouette:
-     * - horizontal bridge only exists between left/right cells of the same block
-     * - vertical bridge only exists between up/down cells of the same block
-     */
     drawBlockConnector(C, anchorX, anchorY) {
         if (!this.connectorGraphics) return;
 
@@ -228,7 +192,6 @@ window.Block = class Block {
 
         g.clear();
 
-        // Dark under-bridge: tạo cảm giác có độ dày nhưng vẫn nằm dưới cell.
         g.fillStyle(darkColor, 0.26);
 
         for (const rect of rects) {
@@ -241,16 +204,12 @@ window.Block = class Block {
             );
         }
 
-        // Main same-color bridge.
-        // Nó rộng bằng tile nên nhìn I/L/T/O liền hơn nhiều.
         g.fillStyle(mainColor, 0.96);
 
         for (const rect of rects) {
             g.fillRoundedRect(rect.x, rect.y, rect.w, rect.h, rect.r);
         }
 
-        // Soft highlight on bridge surface.
-        // Chỉ highlight nhẹ để không đè lên glossy cell ở trên.
         g.fillStyle(lightColor, 0.14);
 
         for (const rect of rects) {
@@ -274,26 +233,14 @@ window.Block = class Block {
         }
     }
 
-    /**
-     * Return bridge rects reused by connector and connector overlay.
-     */
     getConnectorBridgeRects(C, anchorX, anchorY) {
         const cellKeys = new Set(this.cells.map(cell => `${cell.row},${cell.col}`));
 
-        // Visual size of each 1x1 block tile.
         const s = C.CELL_DRAW;
-
-        // Nét nối rộng ngang bằng tile 1x1.
         const bridgeThickness = s;
-
-        // Khoảng cách giữa 2 mép cell sprite.
         const gap = Math.max(0, C.CELL_SIZE - s);
 
-        // Bridge ăn nhẹ vào trong 2 cell để không bị hở seam.
-        // Nếu thấy chỗ nối hơi phồng ở giao điểm T/L, giảm còn 3.
-        // Nếu còn khe hở nhỏ, tăng lên 5.
         const overlap = 4;
-
         const bridgeLength = gap + overlap * 2;
         const radius = Math.max(4, Math.floor(s * 0.18));
 
@@ -338,10 +285,6 @@ window.Block = class Block {
         };
     }
 
-    /**
-     * Draw overlay for connector bridges.
-     * This fixes the issue where bridge parts stay bright when the block is in lower layers.
-     */
     drawBlockConnectorOverlay(C, anchorX, anchorY, alpha) {
         if (!this.connectorOverlayGraphics) return;
 
@@ -360,9 +303,6 @@ window.Block = class Block {
         }
     }
 
-    /**
-     * Rebuild connector overlay according to current layer / blocked state.
-     */
     updateConnectorOverlay(alpha) {
         if (!this.connectorOverlayGraphics) return;
 
@@ -375,9 +315,6 @@ window.Block = class Block {
         this.drawBlockConnectorOverlay(C, anchorX, anchorY, alpha);
     }
 
-    /**
-     * Set up interactive hit area that covers all cells in the block.
-     */
     _setupInteractive(scene) {
         const C = window.CONFIG;
         const firstCell = this.cells[0];
@@ -435,22 +372,42 @@ window.Block = class Block {
     }
 
     // ----------------------------------------------------------
+    // Layer overlay helpers
+    // ----------------------------------------------------------
+
+    getLayerOverlayAlpha() {
+        const C = window.CONFIG;
+
+        const depth = typeof this.visualLayerDepth === 'number'
+            ? this.visualLayerDepth
+            : 0;
+
+        return C.LAYER_OVERLAYS[depth] || 0;
+    }
+
+    getBlockedOverlayAlpha() {
+        const layerDim = this.getLayerOverlayAlpha();
+
+        // Giảm số này nếu Block bị blocked vẫn quá tối.
+        return Math.max(layerDim, 0.16);
+    }
+
+    // ----------------------------------------------------------
     // State management
     // ----------------------------------------------------------
 
     /**
-     * Update visual appearance based on state.
      * @param {'pullable'|'blocked'|'covered'} newState
+     * @param {boolean} force Force visual refresh even if state is unchanged.
      */
-    setState(newState) {
-        if (this.state === newState) return;
+    setState(newState, force = false) {
+        if (this.state === newState && !force) return;
 
         this.state = newState;
 
         if (!this.container || !this.container.scene) return;
 
-        const C = window.CONFIG;
-        const layerDim = C.LAYER_OVERLAYS[this.layer] || 0;
+        const layerDim = this.getLayerOverlayAlpha();
 
         switch (newState) {
             case 'pullable':
@@ -497,11 +454,15 @@ window.Block = class Block {
                     glow.setAlpha(0);
                 }
 
-                for (const overlay of this.overlaySprites) {
-                    overlay.setAlpha(Math.max(layerDim, 0.25));
-                }
+                {
+                    const blockedDim = this.getBlockedOverlayAlpha();
 
-                this.updateConnectorOverlay(Math.max(layerDim, 0.25));
+                    for (const overlay of this.overlaySprites) {
+                        overlay.setAlpha(blockedDim);
+                    }
+
+                    this.updateConnectorOverlay(blockedDim);
+                }
 
                 if (this.shadowGraphics) {
                     this.shadowGraphics.setAlpha(0.65);
@@ -523,24 +484,14 @@ window.Block = class Block {
     // Depth / resolve visual helpers
     // ----------------------------------------------------------
 
-    /**
-     * Normal board depth. Higher layers still render above lower layers
-     * while the block is idle on the board.
-     */
     getBaseDepth() {
         return this.baseDepth ?? (10 + this.layer);
     }
 
-    /**
-     * Resolve depth used while a block is being pulled, lifted, or blasted.
-     */
     getResolveDepth() {
         return this.resolveDepth ?? (45 + this.layer);
     }
 
-    /**
-     * Bring this block above all other board layers while it resolves.
-     */
     bringToResolveDepth(options = {}) {
         if (!this.container || !this.container.scene) return;
 
@@ -578,9 +529,6 @@ window.Block = class Block {
         }
     }
 
-    /**
-     * Restore idle board depth.
-     */
     restoreBaseDepth() {
         if (!this.container || !this.container.scene) return;
 
@@ -591,9 +539,6 @@ window.Block = class Block {
     // Position helpers
     // ----------------------------------------------------------
 
-    /**
-     * Get screen center of this block.
-     */
     getScreenCenter() {
         const C = window.CONFIG;
 
@@ -611,10 +556,6 @@ window.Block = class Block {
         };
     }
 
-    /**
-     * Get cube spawn positions, one per cube.
-     * Each occupied cell generates CONFIG.CUBES_PER_CELL cube spawn positions.
-     */
     getCubeSpawnPositions() {
         const C = window.CONFIG;
         const positions = [];
@@ -641,6 +582,7 @@ window.Block = class Block {
             } else {
                 for (let i = 0; i < cubesPerCell; i++) {
                     const angle = (Math.PI * 2 * i) / cubesPerCell;
+
                     positions.push({
                         x: centerX + Math.cos(angle) * spread,
                         y: centerY + Math.sin(angle) * spread,
@@ -656,9 +598,6 @@ window.Block = class Block {
     // Animations
     // ----------------------------------------------------------
 
-    /**
-     * Shake animation for invalid tap.
-     */
     shake() {
         return new Promise((resolve) => {
             if (!this.container || !this.container.scene) {
@@ -688,9 +627,6 @@ window.Block = class Block {
         });
     }
 
-    /**
-     * Red flash + shake for blocked block.
-     */
     shakeBlocked() {
         return new Promise((resolve) => {
             if (!this.container || !this.container.scene) {
@@ -718,9 +654,6 @@ window.Block = class Block {
         });
     }
 
-    /**
-     * Lift block upward. Returns a Promise.
-     */
     liftUp() {
         return new Promise((resolve) => {
             if (!this.container || !this.container.scene) {
@@ -728,7 +661,6 @@ window.Block = class Block {
                 return;
             }
 
-            // Quan trọng: đưa block lên trên tất cả layer khác trước khi lift.
             this.bringToResolveDepth({ restoreColor: true });
 
             const C = window.CONFIG;
@@ -745,10 +677,6 @@ window.Block = class Block {
         });
     }
 
-    /**
-     * Blast animation — scale up, then shrink & fade.
-     * Destroys the container on completion.
-     */
     blast() {
         return new Promise((resolve) => {
             if (!this.container || !this.container.scene) {
@@ -756,14 +684,12 @@ window.Block = class Block {
                 return;
             }
 
-            // Đảm bảo animation blast cũng không bị layer khác đè.
             this.bringToResolveDepth({ restoreColor: true });
 
             const C = window.CONFIG;
             const scene = this.container.scene;
             const halfDuration = C.BLAST_DURATION / 2;
 
-            // Phase 1: scale up
             scene.tweens.add({
                 targets: this.container,
                 scaleX: C.BLAST_SCALE_UP,
@@ -776,7 +702,6 @@ window.Block = class Block {
                         return;
                     }
 
-                    // Phase 2: shrink + fade
                     scene.tweens.add({
                         targets: this.container,
                         scaleX: 0,
@@ -794,9 +719,6 @@ window.Block = class Block {
         });
     }
 
-    /**
-     * Small hover pulse for UX.
-     */
     hoverPulse() {
         if (!this.container || !this.container.scene) return;
 
@@ -814,9 +736,6 @@ window.Block = class Block {
     // Cleanup
     // ----------------------------------------------------------
 
-    /**
-     * Destroy all Phaser objects.
-     */
     destroy() {
         if (this.container) {
             this.container.removeInteractive();
@@ -827,6 +746,7 @@ window.Block = class Block {
         this.cellSprites = [];
         this.glowSprites = [];
         this.overlaySprites = [];
+
         this.shadowGraphics = null;
         this.connectorGraphics = null;
         this.connectorOverlayGraphics = null;

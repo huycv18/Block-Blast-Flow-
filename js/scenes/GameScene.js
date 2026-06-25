@@ -259,9 +259,15 @@ window.GameScene = class GameScene extends Phaser.Scene {
         this.scene.restart({ levelIndex: this.currentLevel });
     }
 
-    revive() {
-        this.gameState.revive(this.conveyor, this.funnel);
-    }
+    async revive() {
+    await this.gameState.revive({
+        conveyor: this.conveyor,
+        funnel: this.funnel,
+        cubeManager: this.cubeManager,
+        carManager: this.carManager,
+        boosterManager: this.boosterManager,
+    });
+}
 
     cleanup() {
         this.scene.stop('UIScene');

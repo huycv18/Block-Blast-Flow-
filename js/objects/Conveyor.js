@@ -273,6 +273,17 @@ window.Conveyor = class Conveyor {
         }
     }
 
+    resetWarningVisual() {
+    if (this.warningTween) {
+        this.warningTween.stop();
+        this.warningTween = null;
+    }
+
+    if (this.trackGfx) {
+        this.trackGfx.setAlpha(1);
+    }
+}
+
     getCurrentLoad() {
         return this.cubesOnBelt.filter(e => e.cube.state === 'ON_CONVEYOR').length;
     }
@@ -300,16 +311,41 @@ window.Conveyor = class Conveyor {
     }
 
     clear() {
-        for (const entry of this.cubesOnBelt) {
-            entry.cube.sprite.setVisible(false);
-            entry.cube.state = 'DONE';
+    for (const entry of this.cubesOnBelt) {
+        if (!entry || !entry.cube) continue;
+
+        const cube = entry.cube;
+
+        if (cube.sprite && cube.sprite.scene) {
+            this.scene.tweens.killTweensOf(cube.sprite);
+            cube.sprite.setVisible(false);
         }
-        this.cubesOnBelt = [];
+
+        if (cube.body) {
+            this.scene.matter.world.remove(cube.body);
+            cube.body = null;
+        }
+
+        cube.state = 'DONE';
     }
 
+    this.cubesOnBelt = [];
+
+    this.setSpeedMultiplier(1);
+    this.resetWarningVisual();
+}
+
     destroy() {
-        if (this.trackGfx) this.trackGfx.destroy();
-        if (this.warningTween) this.warningTween.stop();
-        this.clear();
+    this.clear();
+
+    if (this.warningTween) {
+        this.warningTween.stop();
+        this.warningTween = null;
     }
+
+    if (this.trackGfx) {
+        this.trackGfx.destroy();
+        this.trackGfx = null;
+    }
+}
 };
