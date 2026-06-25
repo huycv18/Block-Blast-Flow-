@@ -315,6 +315,74 @@
             return null;
         }
 
+        findBlockRecordById(blockId) {
+            if (!blockId) return null;
+
+            for (const layer of this.levelData.layers) {
+                for (const block of layer.blocks) {
+                    if (block.id === blockId) {
+                        return { block, layerIndex: layer.index, layer };
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        getSelectedBlockRecord() {
+            return this.findBlockRecordById(this.selectedBlockId);
+        }
+
+        setSelectedBlockFrozenCount(rawValue) {
+            const record = this.getSelectedBlockRecord();
+
+            if (!record) {
+                this.showToast('Select a block first', true);
+                return false;
+            }
+
+            const count = Math.max(0, parseInt(rawValue || 0, 10) || 0);
+
+            if (count > 0) {
+                record.block.frozenCount = count;
+            } else {
+                delete record.block.frozenCount;
+            }
+
+            this.renderAll();
+            this.showToast(count > 0
+                ? `${record.block.id} frozen count set to ${count}`
+                : `${record.block.id} frozen cleared`);
+
+            return true;
+        }
+
+        updateFrozenPanel() {
+            const label = document.getElementById('frozen-selected-label');
+            const input = document.getElementById('input-frozen-count');
+            const applyBtn = document.getElementById('btn-apply-frozen');
+            const clearBtn = document.getElementById('btn-clear-frozen');
+
+            if (!label || !input || !applyBtn || !clearBtn) return;
+
+            const record = this.getSelectedBlockRecord();
+            const hasSelection = !!record;
+
+            input.disabled = !hasSelection;
+            applyBtn.disabled = !hasSelection;
+            clearBtn.disabled = !hasSelection;
+
+            if (!record) {
+                label.textContent = 'Select a block to set ice count.';
+                input.value = '0';
+                return;
+            }
+
+            const count = Math.max(0, parseInt(record.block.frozenCount || 0, 10) || 0);
+            label.textContent = `Selected ${record.block.id} on L${record.layerIndex}`;
+            input.value = String(count);
+        }
+
         canPlaceBlock(shape, row, col, excludeBlockId) {
             const shapeDef = SHAPES[shape];
             if (!shapeDef) return false;
@@ -807,6 +875,7 @@
             const color = COLORS[block.color];
             if (!color) return;
             const cells = this.getBlockCells(block);
+            const frozenCount = Math.max(0, parseInt(block.frozenCount || 0, 10) || 0);
 
             for (const cell of cells) {
                 if (cell.row < 0 || cell.row >= GRID_ROWS || cell.col < 0 || cell.col >= GRID_COLS) continue;
@@ -829,6 +898,22 @@
                 ctx.fillStyle = hexToRGBA(color.dark, 0.5);
                 ctx.fillRect(x + 3, y + s - 4, s - 6, 3);
 
+                // Frozen Countdown overlay
+                if (frozenCount > 0) {
+                    ctx.globalAlpha = alpha * 0.62;
+                    ctx.fillStyle = '#BDEEFF';
+                    this.roundRect(ctx, x + 1, y + 1, s, s, rad);
+                    ctx.fill();
+
+                    ctx.globalAlpha = alpha * 0.85;
+                    ctx.strokeStyle = '#FFFFFF';
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([4, 3]);
+                    this.roundRect(ctx, x + 4, y + 4, s - 6, s - 6, rad);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+
                 // Layer badge (small number)
                 if (layerIndex > 0) {
                     ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -837,6 +922,29 @@
                     ctx.fillText('L' + layerIndex, x + s - 2, y + s - 2);
                 }
 
+                ctx.globalAlpha = 1;
+            }
+
+            if (frozenCount > 0 && cells.length > 0) {
+                const validCells = cells.filter(c => c.row >= 0 && c.row < GRID_ROWS && c.col >= 0 && c.col < GRID_COLS);
+                const avgCol = validCells.reduce((sum, c) => sum + c.col, 0) / Math.max(1, validCells.length);
+                const avgRow = validCells.reduce((sum, c) => sum + c.row, 0) / Math.max(1, validCells.length);
+                const cx = GRID_PAD + avgCol * CELL_PX + CELL_PX / 2;
+                const cy = GRID_PAD + avgRow * CELL_PX + CELL_PX / 2;
+
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = '#DDF8FF';
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(cx, cy, 15, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#1E5A78';
+                ctx.font = 'bold 18px Outfit';
+                ctx.textAlign = 'center';
+                ctx.fillText(String(frozenCount), cx, cy + 6);
                 ctx.globalAlpha = 1;
             }
 
@@ -903,6 +1011,7 @@
             this.renderLayers();
             this.renderCarsConfig();
             this.renderValidation();
+            this.updateFrozenPanel();
             this.updateStatusBar();
         }
 
@@ -964,6 +1073,7 @@
                         this.showToast(`Selected ${found.block.id} (${found.block.shape} ${found.block.color})`);
                     } else {
                         this.selectedBlockId = null;
+                        this.updateFrozenPanel();
                         this.renderGrid();
                     }
                 }
@@ -996,6 +1106,7 @@
                 this.canvas.style.cursor = this.tool === 'draw' ? 'crosshair'
                     : this.tool === 'erase' ? 'not-allowed' : 'pointer';
                 this.updateStatusBar();
+                this.updateFrozenPanel();
                 this.renderGrid();
             });
 
@@ -1032,6 +1143,16 @@
             syncInput('input-booster-magnet', 'boosters.magnet');
             syncInput('input-booster-shuffle', 'boosters.shuffle');
             syncInput('input-booster-paint', 'boosters.paintGun');
+
+            // Frozen Countdown controls
+            document.getElementById('btn-apply-frozen').addEventListener('click', () => {
+                const value = document.getElementById('input-frozen-count').value;
+                this.setSelectedBlockFrozenCount(value);
+            });
+
+            document.getElementById('btn-clear-frozen').addEventListener('click', () => {
+                this.setSelectedBlockFrozenCount(0);
+            });
 
             // Header buttons
             document.getElementById('btn-new').addEventListener('click', () => {
@@ -1181,6 +1302,13 @@
                 for (const block of layer.blocks) {
                     const num = parseInt(block.id.replace(/\D/g, ''));
                     if (num > maxId) maxId = num;
+
+                    const frozen = Math.max(0, parseInt(block.frozenCount || 0, 10) || 0);
+                    if (frozen > 0) {
+                        block.frozenCount = frozen;
+                    } else {
+                        delete block.frozenCount;
+                    }
                 }
             }
             this.blockIdCounter = maxId + 1;
@@ -1337,9 +1465,13 @@
 
         updateStatusBar() {
             const totalBlocks = this.getAllBlocks().length;
+            const selected = this.getSelectedBlockRecord();
+            const frozenText = selected && selected.block.frozenCount > 0
+                ? ` | Frozen ${selected.block.frozenCount}`
+                : '';
             document.getElementById('status-blocks').textContent = `Blocks: ${totalBlocks}`;
             document.getElementById('status-selection').textContent =
-                `Tool: ${this.tool} | ${this.selectedColor} ${this.selectedShape} | Layer ${this.activeLayer}`;
+                `Tool: ${this.tool} | ${this.selectedColor} ${this.selectedShape} | Layer ${this.activeLayer}${frozenText}`;
         }
 
         showToast(msg, isError) {

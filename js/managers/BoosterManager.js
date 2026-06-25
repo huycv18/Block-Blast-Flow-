@@ -29,7 +29,7 @@ window.BoosterManager = class BoosterManager {
         const result = [];
 
         for (const [id, block] of board.blocks) {
-            if (block && block.state === 'blocked') {
+            if (block && block.state === 'blocked' && !(block.isFrozen && block.isFrozen())) {
                 result.push(block);
             }
         }
@@ -47,6 +47,7 @@ window.BoosterManager = class BoosterManager {
         const pullable = board.getPullableBlocks().filter(block => {
             return block &&
                 block.state === 'pullable' &&
+                !(block.isFrozen && block.isFrozen()) &&
                 !block.isResolving;
         });
 
@@ -126,6 +127,10 @@ window.BoosterManager = class BoosterManager {
 
     async useMagnetOn(block, board) {
         if (this.activeBooster !== 'magnet') return false;
+        if (block && block.isFrozen && block.isFrozen()) {
+            if (block.shakeFrozen) await block.shakeFrozen();
+            return false;
+        }
         if (!block || block.state !== 'blocked') return false;
         if (this.counts.magnet <= 0) return false;
 
@@ -151,14 +156,27 @@ window.BoosterManager = class BoosterManager {
             if (particles && particles.destroy) particles.destroy();
         });
 
-        await block.shake();
-        await block.liftUp();
+        // Lấy snapshot TRƯỚC khi Magnet remove block.
+// Frozen Block vừa được reveal bởi Magnet chưa bị giảm số ngay.
+const frozenCountdownTargets = board.getFrozenCountdownTargets
+    ? board.getFrozenCountdownTargets()
+    : [];
 
-        // Magnet theo GDD: cube vẫn đi Funnel/Conveyor.
-        this.scene.cubeManager.spawnFromBlock(block);
+await block.shake();
+await block.liftUp();
 
-        board.removeBlock(block);
-        block.blast();
+// Magnet theo GDD: cube vẫn đi Funnel/Conveyor.
+this.scene.cubeManager.spawnFromBlock(block);
+
+board.removeBlock(block);
+block.blast();
+
+if (board.decreaseFrozenCounts) {
+    board.decreaseFrozenCounts(1, {
+        animate: true,
+        targets: frozenCountdownTargets,
+    });
+}
 
         this.scene.cameras.main.shake(80, 0.005);
         this.scene.resolvePostBoardChange();
@@ -241,10 +259,21 @@ window.BoosterManager = class BoosterManager {
 
     async usePaintGunOn(block, board, carManager, cubeManager) {
         if (this.activeBooster !== 'paintGun') return false;
+        if (block && block.isFrozen && block.isFrozen()) {
+            if (block.shakeFrozen) await block.shakeFrozen();
+            return false;
+        }
         if (!block || block.state !== 'pullable') return false;
         if (this.counts.paintGun <= 0) return false;
 
         const topLayerTargets = this.getPaintGunTopLayerTargets(board);
+        // Snapshot trước khi Paint Gun phá các block.
+// Frozen Block vừa được reveal bởi cả đợt Paint Gun này sẽ chưa bị giảm số.
+const frozenCountdownTargets = board.getFrozenCountdownTargets
+    ? board.getFrozenCountdownTargets()
+    : [];
+
+let resolvedBlastCount = 0;
 
         // Chỉ cho chọn block ở layer trên cùng hiện tại.
         if (!topLayerTargets.includes(block)) {
@@ -259,6 +288,7 @@ window.BoosterManager = class BoosterManager {
             return b &&
                 b.color === targetColor &&
                 b.state === 'pullable' &&
+                !(b.isFrozen && b.isFrozen()) &&
                 !b.isResolving;
         });
 
@@ -324,14 +354,25 @@ window.BoosterManager = class BoosterManager {
 
                 board.removeBlock(b);
 
-                // Không spawn cube vào Funnel/Conveyor.
-                b.blast();
+// Không spawn cube vào Funnel/Conveyor.
+b.blast();
 
-                this.scene.cameras.main.shake(50, 0.004);
+resolvedBlastCount++;
+
+this.scene.cameras.main.shake(50, 0.004);
             });
         });
 
         await Promise.all(blastPromises);
+        // Paint Gun có thể phá nhiều Block cùng lúc.
+// Mỗi Block bị blast vẫn tính là 1 lượt giảm Frozen Count,
+// nhưng chỉ áp dụng cho Frozen Block đã reveal trước khi Paint Gun bắt đầu.
+if (board.decreaseFrozenCounts && resolvedBlastCount > 0) {
+    board.decreaseFrozenCounts(resolvedBlastCount, {
+        animate: true,
+        targets: frozenCountdownTargets,
+    });
+}
 
         await this.sendPaintGunCubesBurstToCars(
             targetColor,

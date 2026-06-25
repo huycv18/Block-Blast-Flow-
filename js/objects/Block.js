@@ -12,7 +12,7 @@
 window.Block = class Block {
     /**
      * @param {Phaser.Scene} scene
-     * @param {{ id: number, shape: string, color: string, row: number, col: number }} blockData
+     * @param {{ id: number, shape: string, color: string, row: number, col: number, frozenCount?: number }} blockData
      * @param {number} layerIndex
      */
     constructor(scene, blockData, layerIndex) {
@@ -22,6 +22,12 @@ window.Block = class Block {
         this.layer = layerIndex;
         this.originRow = blockData.row;
         this.originCol = blockData.col;
+
+        // Frozen Countdown Block:
+        // - frozenCount > 0 means this block is locked by ice.
+        // - The block cannot be tapped / Magneted / Paint-Gunned while frozen.
+        // - Board.decreaseFrozenCounts() reduces this value whenever another block blasts.
+        this.frozenCount = Math.max(0, parseInt(blockData.frozenCount || 0, 10) || 0);
 
         // 0 = top visible layer, 1 = one layer below, etc.
         // Board recalculates this after all block states are known.
@@ -39,6 +45,9 @@ window.Block = class Block {
         this.cellSprites = [];
         this.glowSprites = [];
         this.overlaySprites = [];
+        this.frozenOverlaySprites = [];
+        this.frozenBadgeBg = null;
+        this.frozenText = null;
 
         this.shadowGraphics = null;
         this.connectorGraphics = null;
@@ -115,7 +124,14 @@ window.Block = class Block {
             overlay.setAlpha(0);
             this.overlaySprites.push(overlay);
             sprites.push(overlay);
+
+            const frozenOverlay = scene.add.rectangle(cx, cy, C.CELL_DRAW, C.CELL_DRAW, 0xBDEEFF);
+            frozenOverlay.setAlpha(0);
+            this.frozenOverlaySprites.push(frozenOverlay);
+            sprites.push(frozenOverlay);
         }
+
+        this.createFrozenBadge(scene, C, anchorX, anchorY, sprites);
 
         this.container = scene.add.container(anchorX, anchorY, sprites);
 
@@ -131,7 +147,48 @@ window.Block = class Block {
 
         this.container.setDepth(this.getBaseDepth());
 
+        this.updateFrozenVisuals(false);
+
         this._setupInteractive(scene);
+    }
+
+    createFrozenBadge(scene, C, anchorX, anchorY, sprites) {
+        const center = this.getLocalShapeCenter(C, anchorX, anchorY);
+        const badgeRadius = Math.max(11, Math.floor(C.CELL_DRAW * 0.32));
+
+        this.frozenBadgeBg = scene.add.circle(center.x, center.y, badgeRadius, 0xDDF8FF, 0.96);
+        this.frozenBadgeBg.setStrokeStyle(3, 0xFFFFFF, 0.98);
+        this.frozenBadgeBg.setAlpha(0);
+        sprites.push(this.frozenBadgeBg);
+
+        this.frozenText = scene.add.text(center.x, center.y + 1, '', {
+            fontFamily: 'Outfit, Arial, sans-serif',
+            fontSize: `${Math.max(17, Math.floor(C.CELL_DRAW * 0.46))}px`,
+            fontStyle: '800',
+            color: '#1E5A78',
+            stroke: '#FFFFFF',
+            strokeThickness: 4,
+            align: 'center',
+        });
+        this.frozenText.setOrigin(0.5);
+        this.frozenText.setAlpha(0);
+        sprites.push(this.frozenText);
+    }
+
+    getLocalShapeCenter(C, anchorX, anchorY) {
+        let sumX = 0;
+        let sumY = 0;
+
+        for (const cell of this.cells) {
+            sumX += C.BOARD_OFFSET_X + cell.col * C.CELL_SIZE + C.CELL_SIZE / 2 - anchorX;
+            sumY += C.BOARD_OFFSET_Y + cell.row * C.CELL_SIZE + C.CELL_SIZE / 2 - anchorY;
+        }
+
+        const count = Math.max(1, this.cells.length);
+        return {
+            x: sumX / count,
+            y: sumY / count,
+        };
     }
 
     drawBlockShadow(C, anchorX, anchorY) {
@@ -402,6 +459,133 @@ window.Block = class Block {
         this._xRayPeekWasCovered = false;
     }
 
+    // ----------------------------------------------------------
+    // Frozen Countdown helpers
+    // ----------------------------------------------------------
+
+    isFrozen() {
+        return (this.frozenCount || 0) > 0;
+    }
+
+    setFrozenCount(value, options = {}) {
+        const oldValue = this.frozenCount || 0;
+        const nextValue = Math.max(0, parseInt(value || 0, 10) || 0);
+
+        this.frozenCount = nextValue;
+        this.updateFrozenVisuals(options.animate === true);
+
+        if (oldValue > 0 && nextValue <= 0) {
+            this.playFrozenUnlockEffect();
+            return true;
+        }
+
+        return false;
+    }
+
+    decreaseFrozenCount(amount = 1, options = {}) {
+        if (!this.isFrozen()) return false;
+
+        const nextValue = Math.max(0, this.frozenCount - Math.max(1, amount || 1));
+        return this.setFrozenCount(nextValue, {
+            animate: options.animate !== false,
+        });
+    }
+
+    updateFrozenVisuals(animate = false) {
+        const frozen = this.isFrozen();
+        const visible = frozen && this.state !== 'covered';
+
+        for (const overlay of this.frozenOverlaySprites || []) {
+            if (!overlay) continue;
+            overlay.setAlpha(visible ? 0.42 : 0);
+        }
+
+        if (this.frozenBadgeBg) {
+            this.frozenBadgeBg.setVisible(visible);
+            this.frozenBadgeBg.setAlpha(visible ? 0.96 : 0);
+        }
+
+        if (this.frozenText) {
+            this.frozenText.setVisible(visible);
+            this.frozenText.setAlpha(visible ? 1 : 0);
+            this.frozenText.setText(visible ? String(this.frozenCount) : '');
+        }
+
+        if (animate && visible && this.container?.scene) {
+            const targets = [];
+            if (this.frozenBadgeBg) targets.push(this.frozenBadgeBg);
+            if (this.frozenText) targets.push(this.frozenText);
+
+            if (targets.length > 0) {
+                this.container.scene.tweens.add({
+                    targets,
+                    scaleX: 1.24,
+                    scaleY: 1.24,
+                    duration: 80,
+                    yoyo: true,
+                    ease: 'Back.easeOut',
+                });
+            }
+        }
+    }
+
+    playFrozenUnlockEffect() {
+        if (!this.container || !this.container.scene) return;
+
+        const scene = this.container.scene;
+        const center = this.getScreenCenter();
+
+        const particles = scene.add.particles(center.x, center.y, 'particle_star', {
+            speed: { min: 45, max: 125 },
+            scale: { start: 0.75, end: 0 },
+            lifespan: 450,
+            quantity: 14,
+            tint: 0xBDEEFF,
+        });
+
+        particles.setDepth(80);
+
+        scene.time.delayedCall(500, () => {
+            if (particles && particles.destroy) particles.destroy();
+        });
+
+        scene.tweens.add({
+            targets: this.container,
+            scaleX: 1.08,
+            scaleY: 1.08,
+            duration: 95,
+            yoyo: true,
+            ease: 'Back.easeOut',
+        });
+    }
+
+    shakeFrozen() {
+        return new Promise((resolve) => {
+            if (!this.container || !this.container.scene) {
+                resolve();
+                return;
+            }
+
+            const targets = [];
+            if (this.frozenBadgeBg) targets.push(this.frozenBadgeBg);
+            if (this.frozenText) targets.push(this.frozenText);
+
+            if (targets.length > 0) {
+                this.container.scene.tweens.add({
+                    targets,
+                    scaleX: 1.18,
+                    scaleY: 1.18,
+                    duration: 80,
+                    yoyo: true,
+                    repeat: 1,
+                    ease: 'Sine.easeInOut',
+                });
+            }
+
+            this.shake().then(resolve);
+        });
+    }
+
     restoreVisualState() {
         this.resetTransientVisualFlags();
         this.setState(this.state, true);
@@ -493,6 +677,8 @@ window.Block = class Block {
                 this.container.setVisible(false);
                 break;
         }
+
+        this.updateFrozenVisuals(false);
     }
 
     /** Called by Board.setXRayMode — makes top-layer blocks transparent so user can see below. */
@@ -581,6 +767,8 @@ window.Block = class Block {
         if (this.connectorGraphics) {
             this.connectorGraphics.setAlpha(1);
         }
+
+        this.updateFrozenVisuals(false);
     }
 
     restoreBaseDepth() {
@@ -802,6 +990,9 @@ window.Block = class Block {
         this.cellSprites = [];
         this.glowSprites = [];
         this.overlaySprites = [];
+        this.frozenOverlaySprites = [];
+        this.frozenBadgeBg = null;
+        this.frozenText = null;
 
         this.shadowGraphics = null;
         this.connectorGraphics = null;

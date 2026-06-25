@@ -199,30 +199,49 @@ window.GameScene = class GameScene extends Phaser.Scene {
 
         if (block.state === 'covered') return;
 
+        if (block.isFrozen && block.isFrozen()) {
+            await block.shakeFrozen();
+            return;
+        }
+
         if (block.state === 'blocked') {
             await block.shakeBlocked();
             return;
         }
 
         if (block.state === 'pullable') {
-            block.isResolving = true;
-            this.gameState.setState('ANIMATING');
+    block.isResolving = true;
+    this.gameState.setState('ANIMATING');
 
-            // Animation chain: shake → lift → blast → cubes spawn
-            await block.shake();
-            await block.liftUp();
+    // Lấy snapshot TRƯỚC khi remove block.
+    // Frozen Block vừa được reveal bởi lượt phá này sẽ chưa bị giảm số.
+    const frozenCountdownTargets = this.board.getFrozenCountdownTargets
+        ? this.board.getFrozenCountdownTargets()
+        : [];
 
-            // Spawn cubes before blast completes for visual overlap
-            this.cubeManager.spawnFromBlock(block);
+    // Animation chain: shake → lift → blast → cubes spawn
+    await block.shake();
+    await block.liftUp();
 
-            this.board.removeBlock(block);
-            block.blast();
+    // Spawn cubes before blast completes for visual overlap
+    this.cubeManager.spawnFromBlock(block);
 
-            // Camera micro-shake
-            this.cameras.main.shake(80, 0.005);
+    this.board.removeBlock(block);
+    block.blast();
 
-            this.resolvePostBoardChange();
-        }
+    // Chỉ giảm số những Frozen Block đã reveal từ trước lượt blast này.
+    if (this.board.decreaseFrozenCounts) {
+        this.board.decreaseFrozenCounts(1, {
+            animate: true,
+            targets: frozenCountdownTargets,
+        });
+    }
+
+    // Camera micro-shake
+    this.cameras.main.shake(80, 0.005);
+
+    this.resolvePostBoardChange();
+}
     }
 
     setXRayMode(isOn) {

@@ -431,13 +431,99 @@ window.Board = class Board {
         const result = [];
 
         for (const [id, block] of this.blocks) {
-            if (block.state === 'pullable') {
+            if (block.state === 'pullable' && !(block.isFrozen && block.isFrozen())) {
                 result.push(block);
             }
         }
 
         return result;
     }
+
+    getFrozenBlocks() {
+    const result = [];
+
+    for (const [id, block] of this.blocks) {
+        if (block && block.isFrozen && block.isFrozen()) {
+            result.push(block);
+        }
+    }
+
+    return result;
+}
+
+/**
+ * Frozen Countdown target rule:
+ * Frozen Block chỉ được đếm ngược khi nó đã thật sự được reveal.
+ *
+ * Ở đây dùng state === 'pullable' để hiểu là:
+ * - Không bị che bởi block layer trên.
+ * - Không bị partially covered.
+ * - Đã có thể trở thành block chơi được nếu không bị frozen.
+ *
+ * Nếu sau này bạn muốn "visible but blocked" cũng được đếm,
+ * đổi điều kiện này thành:
+ * block.state !== 'covered'
+ */
+getFrozenCountdownTargets() {
+    const result = [];
+
+    for (const [id, block] of this.blocks) {
+        if (!block || !block.isFrozen || !block.isFrozen()) continue;
+
+        // Quan trọng:
+        // Frozen Block ở layer dưới chưa reveal thì không được giảm số.
+        if (block.state !== 'pullable') continue;
+
+        result.push(block);
+    }
+
+    return result;
+}
+
+/**
+ * Frozen Countdown rule:
+ * Mỗi lần một Block blast, chỉ những Frozen Block đã eligible từ TRƯỚC lượt remove/blast
+ * mới được giảm số.
+ *
+ * options.targets:
+ * - Snapshot danh sách Frozen Block được phép giảm số.
+ * - Snapshot này nên được lấy TRƯỚC khi remove Block hiện tại khỏi board.
+ *
+ * Lý do:
+ * Nếu Block hiện tại bị phá và làm lộ Frozen Block ở layer dưới,
+ * Frozen Block đó không bị trừ số ngay trong lượt này.
+ * Nó chỉ bắt đầu đếm từ lượt blast tiếp theo.
+ */
+decreaseFrozenCounts(amount = 1, options = {}) {
+    const unlocked = [];
+    const step = Math.max(1, amount || 1);
+
+    const targets = Array.isArray(options.targets)
+        ? options.targets
+        : this.getFrozenCountdownTargets();
+
+    for (const block of targets) {
+        if (!block) continue;
+
+        // Block có thể đã bị xóa bởi logic khác.
+        if (!this.blocks.has(block.id)) continue;
+
+        if (!block.isFrozen || !block.isFrozen()) continue;
+
+        // Recheck để tránh trừ nhầm nếu state thay đổi bất thường.
+        if (block.state !== 'pullable') continue;
+
+        const didUnlock = block.decreaseFrozenCount
+            ? block.decreaseFrozenCount(step, { animate: options.animate !== false })
+            : false;
+
+        if (didUnlock) {
+            unlocked.push(block);
+        }
+    }
+
+    return unlocked;
+}
 
     getVisibleBlocks() {
         const result = [];

@@ -44,6 +44,20 @@
                     <div class="shape-grid" id="shape-grid"></div>
                 </div>
 
+                <!-- Frozen Countdown -->
+                <div class="panel-section">
+                    <div class="panel-section-title">Frozen Countdown</div>
+                    <div class="frozen-editor-box">
+                        <div class="frozen-editor-hint" id="frozen-selected-label">Select a block to set ice count.</div>
+                        <div class="frozen-editor-row">
+                            <input type="number" id="input-frozen-count" min="0" max="99" value="0">
+                            <button class="btn btn-primary btn-sm" id="btn-apply-frozen">Apply</button>
+                            <button class="btn btn-outline btn-sm" id="btn-clear-frozen">Clear</button>
+                        </div>
+                        <div class="frozen-editor-note">Rule: each blasted Block reduces this number by 1. At 0, the Block becomes normal.</div>
+                    </div>
+                </div>
+
                 <!-- Layers -->
                 <div class="panel-section">
                     <div class="panel-section-title">Layers</div>
