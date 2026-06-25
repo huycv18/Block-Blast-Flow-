@@ -110,6 +110,24 @@ window.Conveyor = class Conveyor {
         return metrics.topFrac + metrics.rightFrac + bottomFrac * metrics.botFrac;
     }
 
+    getTopPathTForX(x) {
+    const metrics = this.getPathMetrics();
+    const leftX = this.cx - metrics.straightW;
+    const topFrac = Phaser.Math.Clamp(
+        (x - leftX) / (metrics.straightW * 2),
+        0,
+        1
+    );
+
+    return topFrac * metrics.topFrac;
+}
+
+    /** Returns the t value for the center of the top edge (entry point from Funnel). */
+    getEntryT() {
+        const { topFrac } = this.getPathMetrics();
+        return topFrac / 2;
+    }
+
     /**
      * Convert t (0-1) to screen position on the oval path.
      * Path: stadium shape going clockwise from top-center.
@@ -171,13 +189,15 @@ window.Conveyor = class Conveyor {
     addCube(cube) {
         cube.state = 'ON_CONVEYOR';
         cube.stateTime = Date.now();
-        const entry = this.getPathPosition(0);
+        const entryT = this.getEntryT();
+        const entry = this.getPathPosition(entryT);
         cube.sprite.setPosition(entry.x, entry.y);
 
         this.cubesOnBelt.push({
             cube: cube,
-            pathT: 0,
+            pathT: entryT,
             color: cube.color,
+            absorbedByCars: new Set(), // cars already tried this lap
         });
     }
 
@@ -191,31 +211,55 @@ window.Conveyor = class Conveyor {
 
         const speed = CONFIG.CONVEYOR_SPEED * this.speedMultiplier * (delta / 1000);
 
+        const absorbRadius = CONFIG.CAR_ABSORB_RADIUS;
+        const metrics = this.getPathMetrics();
+        // Only absorb cubes on the bottom edge of the belt (t in bottom segment)
+        const botStart = metrics.topFrac + metrics.rightFrac;
+        const botEnd   = botStart + metrics.botFrac;
+
         for (let i = this.cubesOnBelt.length - 1; i >= 0; i--) {
             const entry = this.cubesOnBelt[i];
             if (entry.cube.state !== 'ON_CONVEYOR') continue;
 
-            const oldT = entry.pathT;
             entry.pathT += speed;
-            if (entry.pathT >= 1) entry.pathT -= 1;
+            if (entry.pathT >= 1) {
+                entry.pathT -= 1;
+                // Reset absorb set on full loop so cube can try cars again
+                entry.absorbedByCars = new Set();
+            }
 
-            // Update position
+            // Update screen position
             const pos = this.getPathPosition(entry.pathT);
             entry.cube.sprite.setPosition(pos.x, pos.y);
 
-            // Check stations
-            for (const station of this.stations) {
-                // Proper crossing detection accounting for path wraparound
-                // Calculate distance to station and distance traveled
-                const toStation = station.t > oldT ? station.t - oldT : 1 - oldT + station.t;
-                const traveled = entry.pathT > oldT ? entry.pathT - oldT : 1 - oldT + entry.pathT;
-                const crossed = traveled >= toStation && toStation > 0;
+            // Only check absorb on bottom segment of belt
+            const t = entry.pathT;
+            const onBottom = (t >= botStart && t <= botEnd);
+            if (!onBottom) continue;
 
-                if (crossed) {
-                    const car = carManager.findMatchingActiveCar(entry.color, station.column);
-                    if (car && car.reserveCube(entry.color)) {
+            // Car-based absorb zone: check X distance to each active car
+            const activeCars = carManager.getActiveCars();
+
+            for (const car of activeCars) {
+                // Skip if already tried this car in the current lap
+                if (!entry.absorbedByCars) entry.absorbedByCars = new Set();
+                if (entry.absorbedByCars.has(car)) continue;
+
+                // Color must match
+                if (car.color !== entry.color) continue;
+
+                // X-distance between cube and car column center
+                const carPos = car.getAbsorbPosition();
+                const dx = Math.abs(pos.x - carPos.x);
+
+                if (dx <= absorbRadius) {
+                    if (car.reserveCube(entry.color)) {
+                        entry.absorbedByCars.add(car);
                         this.matchCubeWithCar(entry, car);
                         break;
+                    } else {
+                        // Car is full — skip this car this lap
+                        entry.absorbedByCars.add(car);
                     }
                 }
             }
@@ -232,25 +276,46 @@ window.Conveyor = class Conveyor {
         entry.cube.state = 'MATCHING';
         this.removeCube(entry);
 
-        // Tween cube to car position
+        const sprite = entry.cube.sprite;
         const carPos = car.getAbsorbPosition();
+        const midX = CONFIG.GAME_WIDTH / 2;
+        const midY = CONFIG.CUBE_ABSORB_MID_Y ?? CONFIG.GAME_HEIGHT / 2;
+        const totalDuration = CONFIG.CUBE_ABSORB_DURATION ?? 740;
+        const liftDuration = CONFIG.CUBE_ABSORB_LIFT_DURATION ?? Math.round(totalDuration * 0.38);
+        const returnDuration = CONFIG.CUBE_ABSORB_RETURN_DURATION ?? Math.max(120, totalDuration - liftDuration);
+
+        sprite.setDepth(35);
+
         this.scene.tweens.add({
-            targets: entry.cube.sprite,
-            x: carPos.x,
-            y: carPos.y,
-            scaleX: 0.5,
-            scaleY: 0.5,
-            alpha: 0.7,
-            duration: 200,
-            ease: 'Power2',
+            targets: sprite,
+            x: midX,
+            y: midY,
+            scaleX: 1.15,
+            scaleY: 1.15,
+            alpha: 1,
+            duration: liftDuration,
+            ease: 'Sine.easeOut',
             onComplete: () => {
-                entry.cube.sprite.setVisible(false);
-                entry.cube.state = 'DONE';
-                const isFull = car.addCube();
-                if (isFull && !car.isExiting) {
-                    this.scene.events.emit('carFull', car);
-                }
-            }
+                this.scene.tweens.add({
+                    targets: sprite,
+                    x: carPos.x,
+                    y: carPos.y,
+                    scaleX: 0.5,
+                    scaleY: 0.5,
+                    alpha: 0.7,
+                    duration: returnDuration,
+                    ease: 'Sine.easeIn',
+                    onComplete: () => {
+                        sprite.setVisible(false);
+                        sprite.setDepth(15);
+                        entry.cube.state = 'DONE';
+                        const isFull = car.addCube();
+                        if (isFull && !car.isExiting) {
+                            this.scene.events.emit('carFull', car);
+                        }
+                    }
+                });
+            },
         });
     }
 
@@ -272,6 +337,17 @@ window.Conveyor = class Conveyor {
             this.trackGfx.setAlpha(1);
         }
     }
+
+    resetWarningVisual() {
+    if (this.warningTween) {
+        this.warningTween.stop();
+        this.warningTween = null;
+    }
+
+    if (this.trackGfx) {
+        this.trackGfx.setAlpha(1);
+    }
+}
 
     getCurrentLoad() {
         return this.cubesOnBelt.filter(e => e.cube.state === 'ON_CONVEYOR').length;
@@ -300,16 +376,41 @@ window.Conveyor = class Conveyor {
     }
 
     clear() {
-        for (const entry of this.cubesOnBelt) {
-            entry.cube.sprite.setVisible(false);
-            entry.cube.state = 'DONE';
+    for (const entry of this.cubesOnBelt) {
+        if (!entry || !entry.cube) continue;
+
+        const cube = entry.cube;
+
+        if (cube.sprite && cube.sprite.scene) {
+            this.scene.tweens.killTweensOf(cube.sprite);
+            cube.sprite.setVisible(false);
         }
-        this.cubesOnBelt = [];
+
+        if (cube.body) {
+            this.scene.matter.world.remove(cube.body);
+            cube.body = null;
+        }
+
+        cube.state = 'DONE';
     }
 
+    this.cubesOnBelt = [];
+
+    this.setSpeedMultiplier(1);
+    this.resetWarningVisual();
+}
+
     destroy() {
-        if (this.trackGfx) this.trackGfx.destroy();
-        if (this.warningTween) this.warningTween.stop();
-        this.clear();
+    this.clear();
+
+    if (this.warningTween) {
+        this.warningTween.stop();
+        this.warningTween = null;
     }
+
+    if (this.trackGfx) {
+        this.trackGfx.destroy();
+        this.trackGfx = null;
+    }
+}
 };

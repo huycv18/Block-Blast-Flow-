@@ -586,26 +586,27 @@ window.GameStateManager = class GameStateManager {
                 const fromX = sprite.x;
                 const fromY = sprite.y;
 
-                const midX = (fromX + target.x) / 2 + Phaser.Math.Between(-35, 35);
-                const midY = (fromY + target.y) / 2 - Phaser.Math.Between(20, 70);
+                // Phase 1: float straight up from current position (zero-gravity feel)
+                const floatY = fromY - (CONFIG.REVIVE_LIFT_HEIGHT ?? 220);
 
-                const jitterX = Phaser.Math.Between(-12, 12);
-                const jitterY = Phaser.Math.Between(-8, 8);
+                const jitterX = Phaser.Math.Between(-6, 6);
+                const jitterY = Phaser.Math.Between(-4, 4);
 
                 this.scene.tweens.add({
                     targets: sprite,
-                    x: midX,
-                    y: midY,
-                    scaleX: 0.78,
-                    scaleY: 0.78,
-                    duration: 90,
-                    ease: 'Quad.easeOut',
+                    x: fromX,
+                    y: floatY,
+                    scaleX: 1.05,
+                    scaleY: 1.05,
+                    duration: CONFIG.REVIVE_FLY_DURATION_1 ?? 320,
+                    ease: 'Sine.easeOut',
                     onComplete: () => {
                         if (!sprite || !sprite.scene) {
                             resolve();
                             return;
                         }
 
+                        // Phase 2: fly from elevated position down to car
                         this.scene.tweens.add({
                             targets: sprite,
                             x: target.x + jitterX,
@@ -613,7 +614,7 @@ window.GameStateManager = class GameStateManager {
                             scaleX: 0.45,
                             scaleY: 0.45,
                             alpha: 0.96,
-                            duration: 130,
+                            duration: CONFIG.REVIVE_FLY_DURATION_2 ?? 420,
                             ease: 'Cubic.easeIn',
                             onComplete: () => {
                                 resolve();
@@ -621,6 +622,7 @@ window.GameStateManager = class GameStateManager {
                         });
                     },
                 });
+
             });
         });
     }

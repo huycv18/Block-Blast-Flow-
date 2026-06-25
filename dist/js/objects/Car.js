@@ -18,6 +18,8 @@ window.Car = class Car {
         this.container = null;
         this.fillBar = null;
         this.fillBarBg = null;
+        this.capacityText = null;
+        this.capacityTextShadow = null;
 
         this.x = CONFIG.CAR_COL_POSITIONS[this.column];
         this.y = this.isActive ? CONFIG.CAR_ROW1_Y : CONFIG.CAR_ROW2_Y;
@@ -102,6 +104,29 @@ window.Car = class Car {
         this.fillBar = scene.add.graphics();
         this.container.add(this.fillBar);
 
+        // Capacity label shown on top of the cargo area.
+        // Examples: 0/8, 4/8, 8/8.
+        this.capacityTextShadow = scene.add.text(1, cargoY + cargoH / 2 + 1, '', {
+            fontFamily: 'Outfit, Arial, sans-serif',
+            fontSize: '15px',
+            fontStyle: '800',
+            color: '#000000',
+            align: 'center',
+        }).setOrigin(0.5);
+        this.capacityTextShadow.setAlpha(0.5);
+        this.container.add(this.capacityTextShadow);
+
+        this.capacityText = scene.add.text(0, cargoY + cargoH / 2, '', {
+            fontFamily: 'Outfit, Arial, sans-serif',
+            fontSize: '15px',
+            fontStyle: '800',
+            color: '#FFFFFF',
+            stroke: '#111111',
+            strokeThickness: 4,
+            align: 'center',
+        }).setOrigin(0.5);
+        this.container.add(this.capacityText);
+
         this._cargoY = cargoY;
         this._cargoH = cargoH;
         this._barX = barX;
@@ -113,10 +138,16 @@ window.Car = class Car {
 
     updateFillVisual() {
         if (!this.fillBar) return;
-        const pct = this.capacity > 0 ? this.filledCount / this.capacity : 0;
+
+        const pct = this.capacity > 0
+            ? Phaser.Math.Clamp(this.filledCount / this.capacity, 0, 1)
+            : 0;
+
         const colorData = COLORS[this.color];
 
         this.fillBar.clear();
+        this.updateCapacityText();
+
         if (pct <= 0) return;
 
         const fillH = Math.max(2, this._barMaxH * pct);
@@ -130,15 +161,54 @@ window.Car = class Car {
         this.fillBar.fillRoundedRect(this._barX, fillY, this._barW, Math.min(4, fillH / 2), 2);
     }
 
+    updateCapacityText() {
+        if (!this.capacityText) return;
+
+        const safeCapacity = Math.max(0, this.capacity || 0);
+        const safeFilled = safeCapacity > 0
+            ? Phaser.Math.Clamp(this.filledCount, 0, safeCapacity)
+            : Math.max(0, this.filledCount || 0);
+
+        const label = `${safeFilled}/${safeCapacity}`;
+
+        this.capacityText.setText(label);
+
+        if (this.capacityTextShadow) {
+            this.capacityTextShadow.setText(label);
+        }
+
+        // Full car gets a yellow capacity label.
+        if (safeCapacity > 0 && safeFilled >= safeCapacity) {
+            this.capacityText.setColor('#FFE66D');
+        } else {
+            this.capacityText.setColor('#FFFFFF');
+        }
+    }
+
     addCube() {
         if (this.reservedCount > 0) {
             this.reservedCount--;
         }
+
         if (this.isFull()) return true;
+
         this.filledCount++;
         this.updateFillVisual();
 
-        // Pop effect
+        // Text pop effect when a cube enters the car.
+        if (this.capacityText) {
+            this.scene.tweens.killTweensOf(this.capacityText);
+            this.capacityText.setScale(1.18);
+            this.scene.tweens.add({
+                targets: this.capacityText,
+                scaleX: 1,
+                scaleY: 1,
+                duration: 120,
+                ease: 'Back.easeOut',
+            });
+        }
+
+        // Car pop effect
         this.scene.tweens.add({
             targets: this.container,
             scaleX: this.isActive ? 1.05 : CONFIG.CAR_ROW2_SCALE * 1.05,
@@ -152,7 +222,10 @@ window.Car = class Car {
     }
 
     getAbsorbPosition() {
-        return { x: this.container.x, y: this.container.y };
+        return {
+            x: this.container.x,
+            y: this.container.y,
+        };
     }
 
     isFull() {
@@ -160,19 +233,23 @@ window.Car = class Car {
     }
 
     canAccept(cubeColor) {
-        return this.color === cubeColor &&
-            (this.filledCount + this.reservedCount) < this.capacity &&
-            !this.isExiting;
+        return this.color === cubeColor
+            && (this.filledCount + this.reservedCount) < this.capacity
+            && !this.isExiting;
     }
 
     reserveCube(cubeColor) {
-        if (!this.canAccept(cubeColor)) return false;
-        this.reservedCount++;
-        return true;
+        if (this.canAccept(cubeColor)) {
+            this.reservedCount++;
+            return true;
+        }
+
+        return false;
     }
 
     setActive(active) {
         this.isActive = active;
+
         if (active) {
             this.container.setScale(1);
             this.container.setAlpha(1);
@@ -188,7 +265,10 @@ window.Car = class Car {
 
             // Sparkle particles
             const particles = this.scene.add.particles(
-                this.container.x, this.container.y, 'particle_star', {
+                this.container.x,
+                this.container.y,
+                'particle_star',
+                {
                     speed: { min: 80, max: 180 },
                     angle: { min: 0, max: 360 },
                     scale: { start: 0.8, end: 0 },
@@ -197,6 +277,8 @@ window.Car = class Car {
                     gravityY: 150,
                 }
             );
+
+            particles.setDepth(50);
             this.scene.time.delayedCall(600, () => particles.destroy());
 
             // Bounce
@@ -217,9 +299,9 @@ window.Car = class Car {
                         onComplete: () => {
                             this.container.setVisible(false);
                             resolve();
-                        }
+                        },
                     });
-                }
+                },
             });
         });
     }
@@ -242,18 +324,23 @@ window.Car = class Car {
                 onComplete: () => {
                     this.isActive = true;
                     resolve();
-                }
+                },
             });
         });
     }
 
     setPosition(x, y) {
-        if (this.container) this.container.setPosition(x, y);
+        if (this.container) {
+            this.container.setPosition(x, y);
+        }
+
         this.x = x;
         this.y = y;
     }
 
     destroy() {
-        if (this.container) this.container.destroy();
+        if (this.container) {
+            this.container.destroy();
+        }
     }
 };

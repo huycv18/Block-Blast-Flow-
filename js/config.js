@@ -86,6 +86,10 @@ window.CONFIG = {
     CUBE_BURST_DELAY: 50,
     CAR_EXIT_DURATION: 500,
     CAR_ADVANCE_DURATION: 300,
+    REVIVE_FLY_DURATION_1: 320,  // ms: cube arcs to screen center (was 180)
+    REVIVE_FLY_DURATION_2: 420,  // ms: cube zooms into car (was 260)
+    REVIVE_GATHER_X: 225,        // X of the gather point (screen center)
+    REVIVE_GATHER_Y: 360,        // Y of the gather point (upper-center)
 
     // --- Boosters ---
     BOOSTER_START_COUNT: 10,
