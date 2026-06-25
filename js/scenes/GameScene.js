@@ -11,15 +11,48 @@ window.GameScene = class GameScene extends Phaser.Scene {
         this.currentLevel = (data && data.levelIndex !== undefined) ? data.levelIndex : 0;
     }
 
+    /**
+     * Decode a level object that was encoded into the URL by the Level Editor
+     * (see LevelEditor.js encodeLevelForURL). URL-safe base64 -> UTF-8 JSON.
+     * This avoids relying on localStorage being shared between the editor tab
+     * and this tab, which is unreliable under file:// origins.
+     */
+    decodeLevelFromURLParam(encoded) {
+        let b64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4 !== 0) b64 += '=';
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const json = new TextDecoder().decode(bytes);
+        return JSON.parse(json);
+    }
+
     create() {
-        // Check if launched from editor play-test
         const params = new URLSearchParams(window.location.search);
+
+        // --- Primary path: level data embedded directly in the URL ---
+        // Works regardless of origin (including file://) since the data
+        // travels with the URL instead of through shared localStorage.
+        const testLevelData = params.get('testLevelData');
+        if (testLevelData) {
+            try {
+                const testLevel = this.decodeLevelFromURLParam(testLevelData);
+                console.log('[GameScene] Loading test level from URL:', testLevel.id, testLevel.name);
+                this.loadLevel(testLevel);
+                return;
+            } catch (e) {
+                console.warn('[GameScene] Failed to decode test level from URL:', e);
+            }
+        }
+
+        // --- Fallback path: localStorage (used only for very large levels
+        // that wouldn't fit safely in a URL) ---
         if (params.get('testLevel')) {
             try {
                 const json = localStorage.getItem('editorTestLevel');
                 if (json) {
                     const testLevel = JSON.parse(json);
-                    console.log('[GameScene] Loading test level from editor:', testLevel.name);
+                    console.log('[GameScene] Loading test level from localStorage:', testLevel.id, testLevel.name);
                     this.loadLevel(testLevel);
                     return;
                 }

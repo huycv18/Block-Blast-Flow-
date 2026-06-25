@@ -25,6 +25,34 @@
         return `rgba(${r},${g},${b},${a})`;
     }
 
+    // ─── Level data URL encoding (avoids file:// localStorage cross-tab issues) ───
+    // Encodes level JSON as a URL-safe base64 string so the game tab can read it
+    // straight from its own URL, without depending on localStorage being shared
+    // between the editor tab and the test tab (which fails under file:// origins).
+    const MAX_URL_LEVEL_LENGTH = 1800; // keep total URL well under browser limits
+
+    function encodeLevelForURL(levelObj) {
+        const json = JSON.stringify(levelObj);
+        // Unicode-safe base64 (handles Vietnamese names, emoji, etc.)
+        const bytes = new TextEncoder().encode(json);
+        let binary = '';
+        for (const byte of bytes) binary += String.fromCharCode(byte);
+        const b64 = btoa(binary);
+        // Make URL-safe: replace +/= which need escaping in query strings
+        return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    function decodeLevelFromURL(encoded) {
+        // Restore standard base64 from URL-safe variant
+        let b64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4 !== 0) b64 += '=';
+        const binary = atob(b64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const json = new TextDecoder().decode(bytes);
+        return JSON.parse(json);
+    }
+
     // ─── Main Editor Class ───
     class LevelEditor {
         constructor() {
@@ -987,7 +1015,13 @@
         }
 
         saveLevelBank(bank) {
-            localStorage.setItem('levelBank', JSON.stringify(bank));
+            try {
+                localStorage.setItem('levelBank', JSON.stringify(bank));
+                return true;
+            } catch (e) {
+                console.warn('[LevelEditor] Could not save to localStorage:', e);
+                return false;
+            }
         }
 
         saveToBank() {
@@ -1011,7 +1045,14 @@
             }
 
             bank.sort((a, b) => a.id - b.id);
-            this.saveLevelBank(bank);
+            const saved = this.saveLevelBank(bank);
+            if (!saved) {
+                this.showToast(
+                    '⚠️ Không thể lưu vào Bank (localStorage bị chặn). ' +
+                    'Hãy dùng "💾 Export JSON" để lưu file trực tiếp.',
+                    true
+                );
+            }
             this.renderBankList();
         }
 
@@ -1040,8 +1081,16 @@
                 this.showToast('Bank is empty — save some levels first', true);
                 return;
             }
-            localStorage.setItem('customLevels', JSON.stringify(bank));
-            this.showToast(`${bank.length} levels sent to Game! Refresh game to play.`);
+            try {
+                localStorage.setItem('customLevels', JSON.stringify(bank));
+                this.showToast(`${bank.length} levels sent to Game! Refresh game to play.`);
+            } catch (e) {
+                this.showToast(
+                    '⚠️ Không gửi được (localStorage bị chặn, thường do mở file trực tiếp file://). ' +
+                    'Hãy dùng "📄 Export levels.js" rồi thay file js/data/levels.js.',
+                    true
+                );
+            }
         }
 
         generateLevelsJS() {
@@ -1108,9 +1157,43 @@
             const bank = this.getLevelBank();
             const level = bank.find(l => l.id === levelId);
             if (!level) return;
-            localStorage.setItem('editorTestLevel', JSON.stringify(level));
-            window.open('index.html?testLevel=1', '_blank');
-            this.showToast(`Play testing Level ${levelId}...`);
+            this.openTestTabForLevel(level, levelId);
+        }
+
+        /**
+         * Open a new tab to play-test a given level.
+         *
+         * Primary path: encode the level JSON straight into the URL (base64,
+         * URL-safe). This works regardless of origin — including file:// —
+         * because the data travels with the URL itself instead of relying on
+         * localStorage being shared between the editor tab and the new tab
+         * (which is unreliable under file:// origins).
+         *
+         * Fallback: if the encoded level would make the URL too long (very
+         * large levels), fall back to localStorage + a short marker, since
+         * most browsers DO share localStorage across tabs of the exact same
+         * file:// path even though cross-tab timing can be unreliable.
+         */
+        openTestTabForLevel(level, levelId) {
+            const encoded = encodeLevelForURL(level);
+
+            if (encoded.length <= MAX_URL_LEVEL_LENGTH) {
+                window.open(`index.html?testLevelData=${encoded}`, '_blank');
+                this.showToast(`Play testing Level ${levelId}...`);
+            } else {
+                // Level too large to fit safely in a URL — try localStorage fallback
+                try {
+                    localStorage.setItem('editorTestLevel', JSON.stringify(level));
+                    window.open('index.html?testLevel=1', '_blank');
+                    this.showToast(`Level ${levelId} quá lớn cho URL — dùng localStorage (có thể không hoạt động với file://)`, true);
+                } catch (e) {
+                    this.showToast(
+                        `⚠️ Level ${levelId} quá lớn để test (vượt giới hạn URL và localStorage bị chặn trên file://). ` +
+                        'Hãy thử chạy qua local server (vd: Vite/Live Server) thay vì mở file trực tiếp.',
+                        true
+                    );
+                }
+            }
         }
 
         // ───────────────────────────────────────
