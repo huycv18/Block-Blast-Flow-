@@ -1483,17 +1483,81 @@
             });
         }
 
-        importFromText(text) {
-            // Try to parse as raw JSON or extract from JS file
-            let json = text.trim();
+        extractBalancedJSON(text, opener, closer) {
+            const start = text.indexOf(opener);
+            if (start === -1) return null;
 
-            // If it's a JS file like levels.js, try to extract the first object
-            if (json.startsWith('window.') || json.startsWith('//')) {
-                const match = json.match(/\{[\s\S]*\}/);
-                if (match) json = match[0];
+            let depth = 0;
+            let inString = false;
+            let escaped = false;
+
+            for (let i = start; i < text.length; i++) {
+                const ch = text[i];
+
+                if (inString) {
+                    if (escaped) {
+                        escaped = false;
+                    } else if (ch === '\\') {
+                        escaped = true;
+                    } else if (ch === '"') {
+                        inString = false;
+                    }
+                    continue;
+                }
+
+                if (ch === '"') {
+                    inString = true;
+                    continue;
+                }
+
+                if (ch === opener) {
+                    depth++;
+                } else if (ch === closer) {
+                    depth--;
+                    if (depth === 0) {
+                        return text.slice(start, i + 1);
+                    }
+                }
             }
 
-            const data = JSON.parse(json);
+            return null;
+        }
+
+        parseImportedLevelText(text) {
+            const raw = text
+                .trim()
+                .replace(/^```(?:json|js|javascript)?\s*/i, '')
+                .replace(/\s*```$/i, '')
+                .trim();
+
+            const candidates = [
+                raw,
+                this.extractBalancedJSON(raw, '[', ']'),
+                this.extractBalancedJSON(raw, '{', '}'),
+            ].filter(Boolean);
+
+            let lastError = null;
+
+            for (const candidate of candidates) {
+                try {
+                    const parsed = JSON.parse(candidate);
+
+                    if (Array.isArray(parsed)) {
+                        const firstLevel = parsed.find(item => item && item.layers && item.cars);
+                        if (firstLevel) return firstLevel;
+                    } else if (parsed && parsed.layers && parsed.cars) {
+                        return parsed;
+                    }
+                } catch (err) {
+                    lastError = err;
+                }
+            }
+
+            throw lastError || new Error('Invalid level format: missing layers or cars');
+        }
+
+        importFromText(text) {
+            const data = this.parseImportedLevelText(text);
 
             // Validate basic structure
             if (!data.layers || !data.cars) {
