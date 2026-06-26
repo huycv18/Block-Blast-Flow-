@@ -189,6 +189,22 @@ window.CarManager = class CarManager {
         return false;
     }
 
+    // Check if ANY car — active or still in queue — will ever accept one of these colors.
+    // Used for board-level deadlock detection before cubes even reach the conveyor.
+    canAnyCarEverAccept(colorSet) {
+        for (const color of colorSet) {
+            for (const col of this.columns) {
+                if (col.active && col.active.canAccept(color)) return true;
+
+                for (const car of col.queue) {
+                    if (car.canAccept(color)) return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     // ----------------------------------------------------------
     // Shuffle Booster
     // ----------------------------------------------------------

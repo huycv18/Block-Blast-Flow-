@@ -88,6 +88,31 @@ window.GameStateManager = class GameStateManager {
             }
         }
 
+        // Board-level deadlock (only meaningful during PLAYING, when board still has blocks).
+        if (this.state === 'PLAYING' && board && !board.isEmpty() && !flowBusy) {
+            const conveyorIdle = conveyor.getCurrentLoad() === 0;
+            const funnelIdle = !funnel || funnel.getCubeCount() === 0;
+            const noCubes = !cubeManager || cubeManager.getActiveCubes().length === 0;
+
+            if (conveyorIdle && funnelIdle && noCubes) {
+                const pullableBlocks = board.getPullableBlocks ? board.getPullableBlocks() : [];
+
+                // No pullable blocks at all — complete deadlock, nothing to tap.
+                if (pullableBlocks.length === 0) {
+                    this.enterLose();
+                    return true;
+                }
+
+                // All pullable block colors have no matching car anywhere (active or queue).
+                const pullableColors = new Set(pullableBlocks.map(b => b.color));
+
+                if (!carManager.canAnyCarEverAccept(pullableColors)) {
+                    this.enterLose();
+                    return true;
+                }
+            }
+        }
+
         return false;
     }
 
