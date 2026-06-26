@@ -40,10 +40,6 @@ window.BoosterManager = class BoosterManager {
         return result;
     }
 
-    getPaintGunTargets(board) {
-        return this.getPaintGunTopLayerTargets(board);
-    }
-
     getPaintGunTopLayerTargets(board) {
         if (!board || !board.getPullableBlocks) return [];
 
@@ -57,8 +53,7 @@ window.BoosterManager = class BoosterManager {
 
         if (pullable.length === 0) return [];
 
-        // Layer trên cùng hiện tại trong số các block pullable.
-        // Theo code hiện tại: layer index lớn hơn nằm phía trên.
+        // Higher layer index = visually on top.
         const topLayer = Math.max(...pullable.map(block => block.layer || 0));
 
         return pullable.filter(block => block.layer === topLayer);
@@ -164,30 +159,29 @@ window.BoosterManager = class BoosterManager {
             if (particles && particles.destroy) particles.destroy();
         });
 
-        // Lấy snapshot TRƯỚC khi Magnet remove block.
-// Frozen Block vừa được reveal bởi Magnet chưa bị giảm số ngay.
-const frozenCountdownTargets = board.getFrozenCountdownTargets
-    ? board.getFrozenCountdownTargets()
-    : [];
+        // Snapshot before removing so only already-revealed blocks count down.
+        const frozenCountdownTargets = board.getFrozenCountdownTargets
+            ? board.getFrozenCountdownTargets()
+            : [];
 
-await block.shake();
-await block.liftUp();
+        await block.shake();
+        await block.liftUp();
 
-// Magnet theo GDD: cube vẫn đi Funnel/Conveyor.
-this.scene.cubeManager.spawnFromBlock(block);
+        // Cubes still flow through Funnel/Conveyor per GDD.
+        this.scene.cubeManager.spawnFromBlock(block);
 
-board.removeBlock(block);
-if (block.keyColor && board.activateKey) {
-    board.activateKey(block.keyColor, block);
-}
-block.blast();
+        board.removeBlock(block);
+        if (block.keyColor && board.activateKey) {
+            board.activateKey(block.keyColor, block);
+        }
+        block.blast();
 
-if (board.decreaseFrozenCounts) {
-    board.decreaseFrozenCounts(1, {
-        animate: true,
-        targets: frozenCountdownTargets,
-    });
-}
+        if (board.decreaseFrozenCounts) {
+            board.decreaseFrozenCounts(1, {
+                animate: true,
+                targets: frozenCountdownTargets,
+            });
+        }
 
         this.scene.cameras.main.shake(80, 0.005);
         this.scene.resolvePostBoardChange();
@@ -282,15 +276,14 @@ if (board.decreaseFrozenCounts) {
         if (this.counts.paintGun <= 0) return false;
 
         const topLayerTargets = this.getPaintGunTopLayerTargets(board);
-        // Snapshot trước khi Paint Gun phá các block.
-// Frozen Block vừa được reveal bởi cả đợt Paint Gun này sẽ chưa bị giảm số.
-const frozenCountdownTargets = board.getFrozenCountdownTargets
-    ? board.getFrozenCountdownTargets()
-    : [];
+        // Snapshot before Paint Gun removes blocks — newly revealed frozen blocks won't count down yet.
+        const frozenCountdownTargets = board.getFrozenCountdownTargets
+            ? board.getFrozenCountdownTargets()
+            : [];
 
-let resolvedBlastCount = 0;
+        let resolvedBlastCount = 0;
 
-        // Chỉ cho chọn block ở layer trên cùng hiện tại.
+        // Only allow targeting blocks on the current top layer.
         if (!topLayerTargets.includes(block)) {
             if (block.shake) await block.shake();
             return false;
@@ -298,7 +291,7 @@ let resolvedBlastCount = 0;
 
         const targetColor = block.color;
 
-        // Chỉ phá block cùng màu, cùng layer trên cùng, đang pullable.
+        // Only blast same-color blocks on the current top layer that are pullable.
         const targets = topLayerTargets.filter(b => {
             return b &&
                 b.color === targetColor &&
@@ -340,10 +333,10 @@ let resolvedBlastCount = 0;
             totalCubeCount += unitCount * (CONFIG.CUBES_PER_CELL || 4);
         }
 
-        // Nếu vì level data sai mà car capacity thiếu, chỉ fill được phần còn slot.
+        // Cap to available slots in case level data has insufficient car capacity.
         const cubeCountToSend = Math.min(totalCubeCount, availableSlots);
 
-        // Nổ gần như cùng lúc, stagger nhẹ cho cảm giác chain.
+        // Slight stagger between blasts for a chain-reaction feel.
         const PAINT_BLOCK_STAGGER = 55;
 
         const blastPromises = targets.map((b, index) => {
@@ -373,25 +366,24 @@ let resolvedBlastCount = 0;
                     board.activateKey(b.keyColor, b);
                 }
 
-// Không spawn cube vào Funnel/Conveyor.
-b.blast();
+                // Paint Gun does not spawn cubes into Funnel/Conveyor.
+                b.blast();
 
-resolvedBlastCount++;
+                resolvedBlastCount++;
 
-this.scene.cameras.main.shake(50, 0.004);
+                this.scene.cameras.main.shake(50, 0.004);
             });
         });
 
         await Promise.all(blastPromises);
-        // Paint Gun có thể phá nhiều Block cùng lúc.
-// Mỗi Block bị blast vẫn tính là 1 lượt giảm Frozen Count,
-// nhưng chỉ áp dụng cho Frozen Block đã reveal trước khi Paint Gun bắt đầu.
-if (board.decreaseFrozenCounts && resolvedBlastCount > 0) {
-    board.decreaseFrozenCounts(resolvedBlastCount, {
-        animate: true,
-        targets: frozenCountdownTargets,
-    });
-}
+        // Each blasted block counts as one frozen-count decrement,
+        // but only for blocks that were already revealed before Paint Gun fired.
+        if (board.decreaseFrozenCounts && resolvedBlastCount > 0) {
+            board.decreaseFrozenCounts(resolvedBlastCount, {
+                animate: true,
+                targets: frozenCountdownTargets,
+            });
+        }
 
         await this.sendPaintGunCubesBurstToCars(
             targetColor,
@@ -434,7 +426,7 @@ if (board.decreaseFrozenCounts && resolvedBlastCount > 0) {
 
             if (!car || amount <= 0) continue;
 
-            // Xe không active cũng được hiện ra tạm để thấy cube bay vào.
+            // Show non-active queue cars temporarily so the player sees cubes fly in.
             if (carManager.prepareCarForPaintGunFill) {
                 carManager.prepareCarForPaintGunFill(car);
             }
@@ -442,7 +434,7 @@ if (board.decreaseFrozenCounts && resolvedBlastCount > 0) {
             for (let i = 0; i < amount; i++) {
                 const source = sources[globalIndex % sources.length];
 
-                // Stagger cực nhỏ để nhìn như ào ạt, không phải lần lượt.
+                // Tiny stagger so cubes look like a burst, not a sequence.
                 const startDelay = Math.floor(globalIndex / 6) * 12 + Phaser.Math.Between(0, 18);
 
                 flyPromises.push(
@@ -458,8 +450,7 @@ if (board.decreaseFrozenCounts && resolvedBlastCount > 0) {
 
         await Promise.all(flyPromises);
 
-        // Sau khi cả đợt cube bay xong mới xử lý xe full.
-        // Như vậy cảm giác là tất cả xe được fill cùng lúc.
+        // Resolve full cars only after the entire burst lands, so all cars appear to fill simultaneously.
         if (carManager.resolvePaintGunFullCars) {
             await carManager.resolvePaintGunFullCars(color);
         }

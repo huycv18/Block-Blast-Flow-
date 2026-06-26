@@ -531,7 +531,7 @@ window.Block = class Block {
     getBlockedOverlayAlpha() {
         const layerDim = this.getLayerOverlayAlpha();
 
-        // Giảm số này nếu Block bị blocked vẫn quá tối.
+        // Increase this if blocked blocks appear too dark.
         return Math.max(layerDim, 0.16);
     }
 

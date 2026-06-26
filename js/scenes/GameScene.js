@@ -215,41 +215,40 @@ window.GameScene = class GameScene extends Phaser.Scene {
         }
 
         if (block.state === 'pullable') {
-    block.isResolving = true;
-    this.gameState.setState('ANIMATING');
+            block.isResolving = true;
+            this.gameState.setState('ANIMATING');
 
-    // Lấy snapshot TRƯỚC khi remove block.
-    // Frozen Block vừa được reveal bởi lượt phá này sẽ chưa bị giảm số.
-    const frozenCountdownTargets = this.board.getFrozenCountdownTargets
-        ? this.board.getFrozenCountdownTargets()
-        : [];
+            // Snapshot before removing so only blocks already revealed count down.
+            const frozenCountdownTargets = this.board.getFrozenCountdownTargets
+                ? this.board.getFrozenCountdownTargets()
+                : [];
 
-    // Animation chain: shake → lift → blast → cubes spawn
-    await block.shake();
-    await block.liftUp();
+            // Animation chain: shake → lift → blast → cubes spawn
+            await block.shake();
+            await block.liftUp();
 
-    // Spawn cubes before blast completes for visual overlap
-    this.cubeManager.spawnFromBlock(block);
+            // Spawn cubes before blast completes for visual overlap
+            this.cubeManager.spawnFromBlock(block);
 
-    this.board.removeBlock(block);
-    if (block.keyColor && this.board.activateKey) {
-        this.board.activateKey(block.keyColor, block);
-    }
-    block.blast();
+            this.board.removeBlock(block);
+            if (block.keyColor && this.board.activateKey) {
+                this.board.activateKey(block.keyColor, block);
+            }
+            block.blast();
 
-    // Chỉ giảm số những Frozen Block đã reveal từ trước lượt blast này.
-    if (this.board.decreaseFrozenCounts) {
-        this.board.decreaseFrozenCounts(1, {
-            animate: true,
-            targets: frozenCountdownTargets,
-        });
-    }
+            // Only decrement frozen blocks that were already revealed before this blast.
+            if (this.board.decreaseFrozenCounts) {
+                this.board.decreaseFrozenCounts(1, {
+                    animate: true,
+                    targets: frozenCountdownTargets,
+                });
+            }
 
-    // Camera micro-shake
-    this.cameras.main.shake(80, 0.005);
+            // Camera micro-shake
+            this.cameras.main.shake(80, 0.005);
 
-    this.resolvePostBoardChange();
-}
+            this.resolvePostBoardChange();
+        }
     }
 
     setXRayMode(isOn) {
@@ -344,14 +343,14 @@ window.GameScene = class GameScene extends Phaser.Scene {
     }
 
     async revive() {
-    await this.gameState.revive({
-        conveyor: this.conveyor,
-        funnel: this.funnel,
-        cubeManager: this.cubeManager,
-        carManager: this.carManager,
-        boosterManager: this.boosterManager,
-    });
-}
+        await this.gameState.revive({
+            conveyor: this.conveyor,
+            funnel: this.funnel,
+            cubeManager: this.cubeManager,
+            carManager: this.carManager,
+            boosterManager: this.boosterManager,
+        });
+    }
 
     cleanup() {
         this.scene.stop('UIScene');

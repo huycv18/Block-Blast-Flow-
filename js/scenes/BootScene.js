@@ -38,7 +38,7 @@ window.BootScene = class BootScene extends Phaser.Scene {
     }
 
     // ----------------------------------------------------------
-    // General textures: grid_cell_empty, booster_bg, star_particle, coin_icon
+    // General textures: grid_cell_empty, booster_bg, particle_star, coin_icon
     // ----------------------------------------------------------
     _generateGeneralTextures() {
         this._generateGridCellEmpty();
@@ -196,7 +196,6 @@ window.BootScene = class BootScene extends Phaser.Scene {
         gfx.closePath();
         gfx.fillPath();
 
-        gfx.generateTexture('star_particle', size, size);
         gfx.generateTexture('particle_star', size, size);
         gfx.destroy();
     }

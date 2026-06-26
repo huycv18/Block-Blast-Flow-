@@ -273,7 +273,7 @@ window.Board = class Board {
 
             block.resetTransientVisualFlags();
 
-            // force = true để overlay được refresh kể cả khi state không đổi.
+            // force = true so the overlay refreshes even when state hasn't changed.
             block.setState(newState, true);
         }
     }
@@ -455,15 +455,14 @@ window.Board = class Board {
 
 /**
  * Frozen Countdown target rule:
- * Frozen Block chỉ được đếm ngược khi nó đã thật sự được reveal.
+ * A frozen block only counts down when it has been fully revealed.
  *
- * Ở đây dùng state === 'pullable' để hiểu là:
- * - Không bị che bởi block layer trên.
- * - Không bị partially covered.
- * - Đã có thể trở thành block chơi được nếu không bị frozen.
+ * state === 'pullable' means:
+ * - Not covered by a block on a higher layer.
+ * - Not partially covered.
+ * - Would be interactable if it weren't frozen.
  *
- * Nếu sau này bạn muốn "visible but blocked" cũng được đếm,
- * đổi điều kiện này thành:
+ * To also count "visible but blocked" blocks, change the condition to:
  * block.state !== 'covered'
  */
 getFrozenCountdownTargets() {
@@ -473,8 +472,7 @@ getFrozenCountdownTargets() {
         if (!block || !block.isFrozen || !block.isFrozen()) continue;
         if (block.isLocked) continue;
 
-        // Quan trọng:
-        // Frozen Block ở layer dưới chưa reveal thì không được giảm số.
+        // Frozen blocks on lower layers that are not yet revealed must not count down.
         if (block.state !== 'pullable') continue;
 
         result.push(block);
@@ -485,17 +483,17 @@ getFrozenCountdownTargets() {
 
 /**
  * Frozen Countdown rule:
- * Mỗi lần một Block blast, chỉ những Frozen Block đã eligible từ TRƯỚC lượt remove/blast
- * mới được giảm số.
+ * Each time a block blasts, only frozen blocks that were eligible BEFORE this
+ * remove/blast turn have their count decremented.
  *
  * options.targets:
- * - Snapshot danh sách Frozen Block được phép giảm số.
- * - Snapshot này nên được lấy TRƯỚC khi remove Block hiện tại khỏi board.
+ * - Snapshot of frozen blocks allowed to count down this turn.
+ * - Must be taken BEFORE the current block is removed from the board.
  *
- * Lý do:
- * Nếu Block hiện tại bị phá và làm lộ Frozen Block ở layer dưới,
- * Frozen Block đó không bị trừ số ngay trong lượt này.
- * Nó chỉ bắt đầu đếm từ lượt blast tiếp theo.
+ * Rationale:
+ * If the blasted block reveals a frozen block on a lower layer, that newly
+ * revealed block does not decrement in the same turn — it starts counting
+ * from the next blast.
  */
 decreaseFrozenCounts(amount = 1, options = {}) {
     const unlocked = [];
@@ -508,12 +506,12 @@ decreaseFrozenCounts(amount = 1, options = {}) {
     for (const block of targets) {
         if (!block) continue;
 
-        // Block có thể đã bị xóa bởi logic khác.
+        // Block may have been removed by other logic.
         if (!this.blocks.has(block.id)) continue;
 
         if (!block.isFrozen || !block.isFrozen()) continue;
 
-        // Recheck để tránh trừ nhầm nếu state thay đổi bất thường.
+        // Re-check state to avoid decrementing if it changed unexpectedly.
         if (block.state !== 'pullable') continue;
 
         const didUnlock = block.decreaseFrozenCount

@@ -195,18 +195,17 @@ window.GameStateManager = class GameStateManager {
 
         this.scene.cameras.main.flash(160, 120, 220, 255, true);
 
-        // Nếu có cube đang bay vào car từ Conveyor thì reservedCount có thể đang giữ slot ảo.
-        // Revive sẽ tự xử lý lại toàn bộ cube, nên reset reserved trước khi allocate.
+        // Cubes still in flight from the Conveyor may hold virtual reserved slots — reset before re-allocating.
         this.resetAllCarReservations(carManager);
 
-        // Lấy toàn bộ cube hiện đang tồn tại trong gameplay.
+        // Gather all cubes currently alive in the gameplay systems.
         const reviveCubes = this.collectAllReviveCubes({
             conveyor,
             funnel,
             cubeManager,
         });
 
-        // Reset Conveyor/Funnel logic sau khi đã lấy cube ra.
+        // Reset Conveyor/Funnel state after cubes have been extracted.
         if (conveyor) {
             if (conveyor.setSpeedMultiplier) {
                 conveyor.setSpeedMultiplier(1);
@@ -223,7 +222,7 @@ window.GameStateManager = class GameStateManager {
             return true;
         }
 
-        // Cho toàn bộ cube bay ào ạt vào cars giống Booster 3.
+        // Send all cubes bursting into cars simultaneously.
         await this.sendReviveCubesToCarsBurst(reviveCubes, carManager, cubeManager);
 
         this.setState('PLAYING');
@@ -405,9 +404,8 @@ window.GameStateManager = class GameStateManager {
                 }
             }
 
-            // Nếu có cube không allocate được do level data thiếu capacity,
-            // vẫn phải release để tránh kẹt object cũ.
-            // Trường hợp level đúng capacity thì đoạn này sẽ không chạy.
+            // Release any unallocated cubes to avoid stale pooled objects.
+            // This path only runs when level data has insufficient car capacity.
             for (let i = cubeIndex; i < cubes.length; i++) {
                 const item = cubes[i];
 
@@ -433,8 +431,7 @@ window.GameStateManager = class GameStateManager {
 
         await Promise.all(allFlyPromises);
 
-        // Sau khi toàn bộ cube bay xong, xử lý car full.
-        // Fill diễn ra cùng lúc, nhưng exit xử lý lần lượt để không phá queue.
+        // Resolve full cars after the whole burst lands. Fill is simultaneous; exits are sequential to preserve queue order.
         for (const color of colorsToResolve) {
             await this.resolveFullCarsAfterRevive(color, carManager);
         }
@@ -657,13 +654,13 @@ window.GameStateManager = class GameStateManager {
     async resolveFullCarsAfterRevive(color, carManager) {
         if (!carManager) return;
 
-        // Nếu CarManager đã có logic của Booster3 thì dùng lại.
+        // Reuse PaintGun's full-car resolution if available.
         if (carManager.resolvePaintGunFullCars) {
             await carManager.resolvePaintGunFullCars(color);
             return;
         }
 
-        // Fallback an toàn.
+        // Safe fallback.
         let guard = 0;
 
         while (guard < 50) {

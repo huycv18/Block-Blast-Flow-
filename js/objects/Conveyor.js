@@ -111,16 +111,16 @@ window.Conveyor = class Conveyor {
     }
 
     getTopPathTForX(x) {
-    const metrics = this.getPathMetrics();
-    const leftX = this.cx - metrics.straightW;
-    const topFrac = Phaser.Math.Clamp(
-        (x - leftX) / (metrics.straightW * 2),
-        0,
-        1
-    );
+        const metrics = this.getPathMetrics();
+        const leftX = this.cx - metrics.straightW;
+        const topFrac = Phaser.Math.Clamp(
+            (x - leftX) / (metrics.straightW * 2),
+            0,
+            1
+        );
 
-    return topFrac * metrics.topFrac;
-}
+        return topFrac * metrics.topFrac;
+    }
 
     /** Returns the t value for the center of the top edge (entry point from Funnel). */
     getEntryT() {
