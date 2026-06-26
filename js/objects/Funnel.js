@@ -399,6 +399,33 @@ window.Funnel = class Funnel {
         return this.getCubeCount() >= this.capacity;
     }
 
+    // Flash red to signal the player that the Funnel is full and no more blocks can be tapped.
+    flashFull() {
+        if (this._flashTween) return;
+
+        const midY = (this.gridBottom + this.funnelBottom) / 2;
+        const flash = this.scene.add.rectangle(
+            this.cx,
+            midY,
+            this.containerWidth,
+            this.funnelBottom - this.gridBottom + 20,
+            0xFF3333,
+            0.38
+        );
+        flash.setDepth(30);
+
+        this._flashTween = this.scene.tweens.add({
+            targets: flash,
+            alpha: 0,
+            duration: 380,
+            ease: 'Quad.easeOut',
+            onComplete: () => {
+                flash.destroy();
+                this._flashTween = null;
+            },
+        });
+    }
+
     hasOverflowed() {
         return this.overflowed;
     }

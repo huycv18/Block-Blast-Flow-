@@ -137,6 +137,12 @@ window.BoosterManager = class BoosterManager {
         if (!block || block.state !== 'blocked') return false;
         if (this.counts.magnet <= 0) return false;
 
+        // Magnet cubes flow through Funnel — block if Funnel is at capacity.
+        if (this.scene.funnel && this.scene.funnel.isFull()) {
+            this.scene.funnel.flashFull();
+            return false;
+        }
+
         this.counts.magnet--;
         this.cancelTargeting();
 

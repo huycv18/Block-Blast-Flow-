@@ -215,6 +215,11 @@ window.GameScene = class GameScene extends Phaser.Scene {
         }
 
         if (block.state === 'pullable') {
+            if (this.funnel && this.funnel.isFull()) {
+                this.funnel.flashFull();
+                return;
+            }
+
             block.isResolving = true;
             this.gameState.setState('ANIMATING');
 
