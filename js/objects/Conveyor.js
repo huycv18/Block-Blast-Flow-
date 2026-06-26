@@ -327,15 +327,23 @@ window.Conveyor = class Conveyor {
             },
         });
 
-        // Spin + shrink while flying
+        // Spin while flying, shrink only at the very end
+        const spinAngle = Phaser.Math.Between(60, 120) * (Math.random() > 0.5 ? 1 : -1);
         this.scene.tweens.add({
             targets: sprite,
-            angle: Phaser.Math.Between(200, 340) * (Math.random() > 0.5 ? 1 : -1),
-            scaleX: 0.15,
-            scaleY: 0.15,
-            alpha: 0.85,
-            duration,
-            ease: 'Cubic.easeIn',
+            angle: spinAngle,
+            duration: duration * 0.75,
+            ease: 'Sine.easeInOut',
+            onComplete: () => {
+                this.scene.tweens.add({
+                    targets: sprite,
+                    scaleX: 0.4,
+                    scaleY: 0.4,
+                    alpha: 0,
+                    duration: duration * 0.25,
+                    ease: 'Quad.easeIn',
+                });
+            },
         });
     }
 
