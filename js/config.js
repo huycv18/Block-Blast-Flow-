@@ -33,7 +33,7 @@ window.CONFIG = {
     CONVEYOR_WIDTH: 340,
     CONVEYOR_HEIGHT: 40,
     CONVEYOR_CORNER_R: 20,
-    CONVEYOR_CAPACITY: 64,
+    CONVEYOR_CAPACITY: 80,
     CONVEYOR_SPEED: 0.2,
     CLEANUP_SPEED_MULT: 2,
     CAR_ABSORB_RADIUS: 55,     // pixel radius around car that pulls cubes off the belt
