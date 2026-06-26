@@ -9,6 +9,8 @@ window.Conveyor = class Conveyor {
         this.capacity = capacity ?? CONFIG.CONVEYOR_CAPACITY;
         this.speedMultiplier = 1;
         this.trackGfx = null;
+        this.warningOverlay = null;
+        this.warningState = 'none'; // 'none' | 'warning' | 'danger'
         this.beltOffset = 0;
         this.warningTween = null;
 
@@ -58,6 +60,28 @@ window.Conveyor = class Conveyor {
 
         // Direction arrows on track
         this.drawDirectionArrows(g);
+
+        this._initWarningOverlay();
+    }
+
+    _initWarningOverlay() {
+        const g = this.scene.add.graphics();
+        g.setDepth(6); // above trackGfx
+        g.setAlpha(0);
+        this.warningOverlay = g;
+    }
+
+    _drawOverlay(color) {
+        const g = this.warningOverlay;
+        g.clear();
+        g.fillStyle(color, 1);
+        g.fillRoundedRect(
+            this.cx - this.hw,
+            this.cy - this.hh,
+            this.hw * 2,
+            this.hh * 2,
+            this.cr
+        );
     }
 
     drawDirectionArrows(g) {
@@ -301,32 +325,58 @@ window.Conveyor = class Conveyor {
     updateWarningVisual() {
         const pct = this.getLoadPercent();
 
-        if (pct >= CONFIG.CONV_DANGER && !this.warningTween) {
-            // Red flash
-            this.warningTween = this.scene.tweens.add({
-                targets: this.trackGfx,
-                alpha: 0.5,
-                duration: 300,
-                yoyo: true,
-                repeat: -1,
-            });
-        } else if (pct < CONFIG.CONV_DANGER && this.warningTween) {
+        if (pct >= CONFIG.CONV_DANGER) {
+            if (this.warningState !== 'danger') {
+                this.warningState = 'danger';
+                this._stopWarningTween();
+                this._drawOverlay(THEME.DANGER_RED);
+                // Fast pulse: 0.15 → 0.55 → 0.15
+                this.warningTween = this.scene.tweens.add({
+                    targets: this.warningOverlay,
+                    alpha: { from: 0.15, to: 0.55 },
+                    duration: 250,
+                    yoyo: true,
+                    repeat: -1,
+                    ease: 'Sine.easeInOut',
+                });
+            }
+        } else if (pct >= CONFIG.CONV_WARNING) {
+            if (this.warningState !== 'warning') {
+                this.warningState = 'warning';
+                this._stopWarningTween();
+                this._drawOverlay(THEME.WARNING_ORANGE);
+                // Slow pulse: 0.08 → 0.28 → 0.08
+                this.warningTween = this.scene.tweens.add({
+                    targets: this.warningOverlay,
+                    alpha: { from: 0.08, to: 0.28 },
+                    duration: 600,
+                    yoyo: true,
+                    repeat: -1,
+                    ease: 'Sine.easeInOut',
+                });
+            }
+        } else {
+            if (this.warningState !== 'none') {
+                this.warningState = 'none';
+                this._stopWarningTween();
+                if (this.warningOverlay) this.warningOverlay.setAlpha(0);
+            }
+        }
+    }
+
+    _stopWarningTween() {
+        if (this.warningTween) {
             this.warningTween.stop();
             this.warningTween = null;
-            this.trackGfx.setAlpha(1);
         }
     }
 
     resetWarningVisual() {
-    if (this.warningTween) {
-        this.warningTween.stop();
-        this.warningTween = null;
+        this._stopWarningTween();
+        this.warningState = 'none';
+        if (this.warningOverlay) this.warningOverlay.setAlpha(0);
+        if (this.trackGfx) this.trackGfx.setAlpha(1);
     }
-
-    if (this.trackGfx) {
-        this.trackGfx.setAlpha(1);
-    }
-}
 
     getCurrentLoad() {
         return this.cubesOnBelt.filter(e => e.cube.state === 'ON_CONVEYOR').length;
@@ -380,16 +430,16 @@ window.Conveyor = class Conveyor {
 }
 
     destroy() {
-    this.clear();
+        this.clear();
 
-    if (this.warningTween) {
-        this.warningTween.stop();
-        this.warningTween = null;
-    }
+        if (this.warningOverlay) {
+            this.warningOverlay.destroy();
+            this.warningOverlay = null;
+        }
 
-    if (this.trackGfx) {
-        this.trackGfx.destroy();
-        this.trackGfx = null;
+        if (this.trackGfx) {
+            this.trackGfx.destroy();
+            this.trackGfx = null;
+        }
     }
-}
 };
