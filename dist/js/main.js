@@ -1,5 +1,5 @@
 // ============================================================
-// Block Cube Puzzle — Main Entry Point
+// Block Blast Flow! — Main Entry Point
 // Initializes Phaser 3 game with Matter.js physics
 // ============================================================
 
@@ -21,7 +21,7 @@ window.addEventListener('load', () => {
         backgroundColor: THEME.BG_CSS,
         scale: {
             mode: Phaser.Scale.FIT,
-            autoCenter: Phaser.Scale.CENTER_BOTH,
+            autoCenter: Phaser.Scale.NO_CENTER,
         },
         physics: {
             default: 'matter',

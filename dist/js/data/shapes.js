@@ -12,6 +12,8 @@ window.SHAPES = {
     I3V:  { name: 'I3V',  cells: [[0,0],[1,0],[2,0]], unitCount: 3 },
     L2:   { name: 'L2',   cells: [[0,0],[1,0],[1,1]], unitCount: 3 },
     L2R:  { name: 'L2R',  cells: [[0,1],[1,0],[1,1]], unitCount: 3 },
+    L2TL: { name: 'L2TL', cells: [[0,0],[0,1],[1,0]], unitCount: 3 },
+    L2TR: { name: 'L2TR', cells: [[0,0],[0,1],[1,1]], unitCount: 3 },
 
     // --- Tetrominos ---
     O:    { name: 'O',    cells: [[0,0],[0,1],[1,0],[1,1]], unitCount: 4 },
@@ -25,6 +27,10 @@ window.SHAPES = {
     LR:   { name: 'LR',   cells: [[0,0],[0,1],[1,0],[2,0]], unitCount: 4 },
     J:    { name: 'J',    cells: [[0,1],[1,1],[2,0],[2,1]], unitCount: 4 },
     JR:   { name: 'JR',   cells: [[0,0],[0,1],[1,1],[2,1]], unitCount: 4 },
+    LH1:  { name: 'LH1',  cells: [[0,0],[1,0],[1,1],[1,2]], unitCount: 4 },
+    LH2:  { name: 'LH2',  cells: [[0,2],[1,0],[1,1],[1,2]], unitCount: 4 },
+    JH1:  { name: 'JH1',  cells: [[0,0],[0,1],[0,2],[1,0]], unitCount: 4 },
+    JH2:  { name: 'JH2',  cells: [[0,0],[0,1],[0,2],[1,2]], unitCount: 4 },
     S:    { name: 'S',    cells: [[0,1],[0,2],[1,0],[1,1]], unitCount: 4 },
     SV:   { name: 'SV',   cells: [[0,0],[1,0],[1,1],[2,1]], unitCount: 4 },
     Z:    { name: 'Z',    cells: [[0,0],[0,1],[1,1],[1,2]], unitCount: 4 },

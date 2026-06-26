@@ -1,5 +1,5 @@
 // ============================================================
-// Block Cube Puzzle — Game Configuration
+// Block Blast Flow! — Game Configuration
 // Global namespace: window.CONFIG, window.COLORS, window.THEME
 // ============================================================
 
@@ -33,14 +33,11 @@ window.CONFIG = {
     CONVEYOR_WIDTH: 340,
     CONVEYOR_HEIGHT: 40,
     CONVEYOR_CORNER_R: 20,
-    CONVEYOR_CAPACITY: 40,
+    CONVEYOR_CAPACITY: 80,
     CONVEYOR_SPEED: 0.2,
     CLEANUP_SPEED_MULT: 2,
     CAR_ABSORB_RADIUS: 55,     // pixel radius around car that pulls cubes off the belt
-    CUBE_ABSORB_MID_Y: 400,
-    CUBE_ABSORB_LIFT_DURATION: 280,
-    CUBE_ABSORB_RETURN_DURATION: 460,
-    CUBE_ABSORB_DURATION: 740, // fallback total ms for cube tween into car
+    CUBE_ABSORB_DURATION: 380, // ms for cube tween into car (was 200)
 
     // --- Warning ---
     CONV_WARNING: 0.75,
@@ -62,11 +59,11 @@ window.CONFIG = {
 
     // --- Cubes ---
     CUBE_SIZE: 10,
-    CUBES_PER_CELL: 4,
+    CUBES_PER_CELL: 8,
     CUBE_POOL_SIZE: 200,
 
     // --- Funnel ---
-    FUNNEL_CAPACITY: 40,
+    FUNNEL_CAPACITY: 64,
     DRAIN_INTERVAL: 120,
 
     // --- Physics ---
@@ -89,8 +86,10 @@ window.CONFIG = {
     CUBE_BURST_DELAY: 50,
     CAR_EXIT_DURATION: 500,
     CAR_ADVANCE_DURATION: 300,
-    REVIVE_FLY_DURATION_1: 180,  // ms: cube arcs to midpoint (was 90)
-    REVIVE_FLY_DURATION_2: 260,  // ms: cube zooms into car (was 130)
+    REVIVE_FLY_DURATION_1: 320,  // ms: cube arcs to screen center (was 180)
+    REVIVE_FLY_DURATION_2: 420,  // ms: cube zooms into car (was 260)
+    REVIVE_GATHER_X: 225,        // X of the gather point (screen center)
+    REVIVE_GATHER_Y: 360,        // Y of the gather point (upper-center)
 
     // --- Boosters ---
     BOOSTER_START_COUNT: 10,
@@ -103,6 +102,9 @@ window.CONFIG = {
     // --- Layer ---
     LAYER_OVERLAYS: [0.0, 0.25, 0.45],
     MAX_INTERACTION_DEPTH: 3,
+    XRAY_TOP_ALPHA: 0,           // opacity of top-layer blocks when X-Ray is active (0 = fully invisible)
+    XRAY_LOWER_OVERLAY: 0.02,   // dark overlay remaining on sub-layers in X-Ray mode
+    XRAY_HOLD_DELAY: 300,        // ms user must hold a block before X-Ray peek activates
 };
 
 // ============================================================

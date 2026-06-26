@@ -1,5 +1,5 @@
 // ============================================================
-// Block Cube Puzzle — Level Editor
+// Block Blast Flow! — Level Editor
 // Pure vanilla JS, no dependencies beyond config/shapes/validator
 // ============================================================
 
@@ -12,6 +12,8 @@
     const GRID_ROWS = CONFIG.GRID_ROWS;  // Read from game config
     const CANVAS_W = GRID_COLS * CELL_PX + GRID_PAD * 2;
     const CANVAS_H = GRID_ROWS * CELL_PX + GRID_PAD * 2;
+    const CUBES_PER_CELL = CONFIG.CUBES_PER_CELL || 8;
+    const DEFAULT_CAR_CAPACITY = 16;
 
     // ─── Color helpers ───
     function hexToCSS(hex) {
@@ -36,6 +38,12 @@
             this.hoverCell = null;
             this.blockIdCounter = 1;
             this.selectedBlockId = null;
+            this.draggedBlockId = null;
+            this.dragStartCell = null;
+            this.dragStartPosition = null;
+            this.dragPreview = null;
+            this.suppressNextClick = false;
+            this.hiddenLayers = new Set();
 
             // Level data
             this.levelData = this.createNewLevel();
@@ -66,9 +74,9 @@
                 funnelCapacity: 40,
                 layers: [{ index: 0, blocks: [] }],
                 cars: [
-                    { column: 0, color: 'red', capacity: 8, queueOrder: 0 },
-                    { column: 1, color: 'blue', capacity: 8, queueOrder: 0 },
-                    { column: 2, color: 'green', capacity: 8, queueOrder: 0 },
+                    { column: 0, color: 'red', capacity: DEFAULT_CAR_CAPACITY, queueOrder: 0 },
+                    { column: 1, color: 'blue', capacity: DEFAULT_CAR_CAPACITY, queueOrder: 0 },
+                    { column: 2, color: 'green', capacity: DEFAULT_CAR_CAPACITY, queueOrder: 0 },
                 ],
                 boosters: { magnet: 10, shuffle: 10, paintGun: 10 },
             };
@@ -76,6 +84,21 @@
 
         getActiveLayerData() {
             return this.levelData.layers.find(l => l.index === this.activeLayer);
+        }
+
+        isLayerVisible(layerIndex) {
+            return !this.hiddenLayers.has(layerIndex);
+        }
+
+        toggleLayerVisibility(layerIndex) {
+            if (this.hiddenLayers.has(layerIndex)) {
+                this.hiddenLayers.delete(layerIndex);
+            } else {
+                this.hiddenLayers.add(layerIndex);
+            }
+
+            this.renderLayers();
+            this.renderGrid();
         }
 
         getAllBlocks() {
@@ -91,7 +114,7 @@
         getBlockCubeCount(block) {
             const shape = SHAPES[block.shape];
             if (!shape) return 0;
-            return shape.unitCount * (CONFIG.CUBES_PER_CELL || 4);
+            return shape.unitCount * CUBES_PER_CELL;
         }
 
         getHighestNonEmptyLayer() {
@@ -236,13 +259,12 @@
                 if (!ok) return;
             }
 
-            const defaultCapacity = 8;
             const generated = [];
 
             for (const item of priority) {
                 let remaining = item.totalCubes;
                 while (remaining > 0) {
-                    const capacity = Math.min(defaultCapacity, remaining);
+                    const capacity = Math.min(DEFAULT_CAR_CAPACITY, remaining);
                     const index = generated.length;
                     generated.push({
                         column: index % 3,
@@ -285,7 +307,11 @@
         }
 
         findBlockAtAnyLayer(row, col) {
-            for (const layer of this.levelData.layers) {
+            const layers = [...this.levelData.layers].sort((a, b) => b.index - a.index);
+
+            for (const layer of layers) {
+                if (!this.isLayerVisible(layer.index)) continue;
+
                 for (const block of layer.blocks) {
                     const cells = this.getBlockCells(block);
                     if (cells.some(c => c.row === row && c.col === col)) {
@@ -296,7 +322,328 @@
             return null;
         }
 
-        canPlaceBlock(shape, row, col, excludeBlockId) {
+        findBlockRecordById(blockId) {
+            if (!blockId) return null;
+
+            for (const layer of this.levelData.layers) {
+                for (const block of layer.blocks) {
+                    if (block.id === blockId) {
+                        return { block, layerIndex: layer.index, layer };
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        getSelectedBlockRecord() {
+            return this.findBlockRecordById(this.selectedBlockId);
+        }
+
+        getLayerData(layerIndex) {
+            return this.levelData.layers.find(l => l.index === layerIndex) || null;
+        }
+
+        setActiveTool(tool) {
+            this.tool = tool;
+            document.querySelectorAll('#tool-buttons .tool-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.tool === tool);
+            });
+            this.canvas.style.cursor = tool === 'draw' ? 'crosshair'
+                : tool === 'erase' ? 'not-allowed' : 'pointer';
+        }
+
+        getRotatedShapeName(shapeName) {
+            const shape = SHAPES[shapeName];
+            if (!shape) return null;
+
+            const rotated = shape.cells.map(([row, col]) => [col, -row]);
+            const minRow = Math.min(...rotated.map(([row]) => row));
+            const minCol = Math.min(...rotated.map(([, col]) => col));
+            const normalizedKey = rotated
+                .map(([row, col]) => `${row - minRow},${col - minCol}`)
+                .sort()
+                .join('|');
+
+            for (const [name, candidate] of Object.entries(SHAPES)) {
+                const candidateKey = candidate.cells
+                    .map(([row, col]) => `${row},${col}`)
+                    .sort()
+                    .join('|');
+
+                if (candidateKey === normalizedKey) return name;
+            }
+
+            return null;
+        }
+
+        rotateSelectedBlock() {
+            const record = this.getSelectedBlockRecord();
+
+            if (!record) {
+                this.showToast('Select a block first', true);
+                return false;
+            }
+
+            const nextShape = this.getRotatedShapeName(record.block.shape);
+
+            if (!nextShape) {
+                this.showToast(`${record.block.shape} cannot rotate`, true);
+                return false;
+            }
+
+            if (!this.canPlaceBlock(
+                nextShape,
+                record.block.row,
+                record.block.col,
+                record.block.id,
+                record.layerIndex
+            )) {
+                this.showToast(`Cannot rotate ${record.block.id}: cells overlap or leave board`, true);
+                return false;
+            }
+
+            record.block.shape = nextShape;
+            this.selectedShape = nextShape;
+            this.buildShapeGrid();
+            this.renderAll();
+            this.showToast(`${record.block.id} rotated to ${nextShape}`);
+            return true;
+        }
+
+        setSelectedBlockColor(color) {
+            const record = this.getSelectedBlockRecord();
+
+            if (!record || !COLOR_NAMES.includes(color)) {
+                this.showToast('Select a block first', true);
+                return false;
+            }
+
+            record.block.color = color;
+            this.selectedColor = color;
+            this.buildColorGrid();
+            this.renderAll();
+            this.showToast(`${record.block.id} color set to ${color}`);
+            return true;
+        }
+
+        setSelectedBlockShape(shapeName) {
+            const record = this.getSelectedBlockRecord();
+
+            if (!record || !SHAPES[shapeName]) {
+                this.showToast('Select a block first', true);
+                return false;
+            }
+
+            if (shapeName === record.block.shape) return true;
+
+            if (!this.canPlaceBlock(
+                shapeName,
+                record.block.row,
+                record.block.col,
+                record.block.id,
+                record.layerIndex
+            )) {
+                this.showToast(`Cannot change ${record.block.id} to ${shapeName}: cells overlap or leave board`, true);
+                this.updateFrozenPanel();
+                return false;
+            }
+
+            record.block.shape = shapeName;
+            this.selectedShape = shapeName;
+            this.buildShapeGrid();
+            this.renderAll();
+            this.showToast(`${record.block.id} shape set to ${shapeName}`);
+            return true;
+        }
+
+        setSelectedBlockLayer(rawLayerIndex) {
+            const record = this.getSelectedBlockRecord();
+
+            if (!record) {
+                this.showToast('Select a block first', true);
+                return false;
+            }
+
+            const targetLayerIndex = parseInt(rawLayerIndex, 10);
+            const targetLayer = this.getLayerData(targetLayerIndex);
+
+            if (!targetLayer) {
+                this.showToast('Layer not found', true);
+                return false;
+            }
+
+            if (targetLayerIndex === record.layerIndex) return true;
+
+            if (!this.canPlaceBlock(
+                record.block.shape,
+                record.block.row,
+                record.block.col,
+                record.block.id,
+                targetLayerIndex
+            )) {
+                this.showToast(`Cannot move ${record.block.id} to L${targetLayerIndex}: cells overlap`, true);
+                this.updateFrozenPanel();
+                return false;
+            }
+
+            record.layer.blocks = record.layer.blocks.filter(block => block.id !== record.block.id);
+            targetLayer.blocks.push(record.block);
+            this.activeLayer = targetLayerIndex;
+
+            this.renderAll();
+            this.showToast(`${record.block.id} moved to L${targetLayerIndex}`);
+            return true;
+        }
+
+        setSelectedBlockFrozenCount(rawValue) {
+            const record = this.getSelectedBlockRecord();
+
+            if (!record) {
+                this.showToast('Select a block first', true);
+                return false;
+            }
+
+            const count = Math.max(0, parseInt(rawValue || 0, 10) || 0);
+
+            if (count > 0) {
+                record.block.frozenCount = count;
+            } else {
+                delete record.block.frozenCount;
+            }
+
+            this.renderAll();
+            this.showToast(count > 0
+                ? `${record.block.id} frozen count set to ${count}`
+                : `${record.block.id} frozen cleared`);
+
+            return true;
+        }
+
+        setSelectedBlockKeyColor(color) {
+            const record = this.getSelectedBlockRecord();
+
+            if (!record) {
+                this.showToast('Select a block first', true);
+                return false;
+            }
+
+            if (color) {
+                record.block.keyColor = color;
+                delete record.block.lockColor;
+            } else {
+                delete record.block.keyColor;
+            }
+
+            this.renderAll();
+            this.showToast(color
+                ? `${record.block.id} key set to ${color}`
+                : `${record.block.id} key cleared`);
+
+            return true;
+        }
+
+        setSelectedBlockLockColor(color) {
+            const record = this.getSelectedBlockRecord();
+
+            if (!record) {
+                this.showToast('Select a block first', true);
+                return false;
+            }
+
+            if (color) {
+                record.block.lockColor = color;
+                delete record.block.keyColor;
+            } else {
+                delete record.block.lockColor;
+            }
+
+            this.renderAll();
+            this.showToast(color
+                ? `${record.block.id} lock set to ${color}`
+                : `${record.block.id} lock cleared`);
+
+            return true;
+        }
+
+        getKeyLockMatchWarnings() {
+            const keyColors = new Set();
+            const lockColors = new Set();
+
+            for (const layer of this.levelData.layers) {
+                for (const block of layer.blocks || []) {
+                    if (block.keyColor) keyColors.add(block.keyColor);
+                    if (block.lockColor) lockColors.add(block.lockColor);
+                }
+            }
+
+            const warnings = [];
+
+            for (const color of keyColors) {
+                if (!lockColors.has(color)) warnings.push(`Key ${color} has no matching lock`);
+            }
+
+            for (const color of lockColors) {
+                if (!keyColors.has(color)) warnings.push(`Lock ${color} has no matching key`);
+            }
+
+            return warnings;
+        }
+
+        updateFrozenPanel() {
+            this.refreshBlockLayerSelect();
+
+            const label = document.getElementById('frozen-selected-label');
+            const colorSelect = document.getElementById('select-block-color');
+            const shapeSelect = document.getElementById('select-block-shape');
+            const layerSelect = document.getElementById('select-block-layer');
+            const input = document.getElementById('input-frozen-count');
+            const applyBtn = document.getElementById('btn-apply-frozen');
+            const clearBtn = document.getElementById('btn-clear-frozen');
+            const keySelect = document.getElementById('select-key-color');
+            const lockSelect = document.getElementById('select-lock-color');
+            const rotateBtn = document.getElementById('btn-rotate-block');
+            const warning = document.getElementById('key-lock-warning');
+
+            if (!label || !input || !applyBtn || !clearBtn || !keySelect || !lockSelect) return;
+
+            const record = this.getSelectedBlockRecord();
+            const hasSelection = !!record;
+
+            if (colorSelect) colorSelect.disabled = !hasSelection;
+            if (shapeSelect) shapeSelect.disabled = !hasSelection;
+            if (layerSelect) layerSelect.disabled = !hasSelection;
+            input.disabled = !hasSelection;
+            applyBtn.disabled = !hasSelection;
+            clearBtn.disabled = !hasSelection;
+            keySelect.disabled = !hasSelection;
+            lockSelect.disabled = !hasSelection;
+            if (rotateBtn) rotateBtn.disabled = !hasSelection;
+
+            if (!record) {
+                label.textContent = 'Select a block to edit properties.';
+                if (colorSelect) colorSelect.value = '';
+                if (shapeSelect) shapeSelect.value = '';
+                if (layerSelect) layerSelect.value = '';
+                input.value = '0';
+                keySelect.value = '';
+                lockSelect.value = '';
+                if (warning) warning.textContent = this.getKeyLockMatchWarnings().join('. ');
+                return;
+            }
+
+            const count = Math.max(0, parseInt(record.block.frozenCount || 0, 10) || 0);
+            label.textContent = `Selected ${record.block.id} on L${record.layerIndex}`;
+            if (colorSelect) colorSelect.value = record.block.color || '';
+            if (shapeSelect) shapeSelect.value = record.block.shape || '';
+            if (layerSelect) layerSelect.value = String(record.layerIndex);
+            input.value = String(count);
+            keySelect.value = record.block.keyColor || '';
+            lockSelect.value = record.block.lockColor || '';
+            if (warning) warning.textContent = this.getKeyLockMatchWarnings().join('. ');
+        }
+
+        canPlaceBlock(shape, row, col, excludeBlockId, layerIndex = this.activeLayer) {
             const shapeDef = SHAPES[shape];
             if (!shapeDef) return false;
             const cells = shapeDef.cells.map(([dr, dc]) => ({ row: row + dr, col: col + dc }));
@@ -307,7 +654,7 @@
             }
 
             // Overlap check (same layer)
-            const layer = this.getActiveLayerData();
+            const layer = this.getLayerData(layerIndex);
             if (layer) {
                 for (const block of layer.blocks) {
                     if (excludeBlockId && block.id === excludeBlockId) continue;
@@ -325,13 +672,15 @@
             const layer = this.getActiveLayerData();
             if (!layer) return false;
             const id = 'b' + this.blockIdCounter++;
-            layer.blocks.push({
+            const block = {
                 id,
                 shape: this.selectedShape,
                 color: this.selectedColor,
                 row,
                 col,
-            });
+            };
+
+            layer.blocks.push(block);
             return true;
         }
 
@@ -341,6 +690,9 @@
             const block = this.findBlockAt(row, col);
             if (!block) return false;
             layer.blocks = layer.blocks.filter(b => b.id !== block.id);
+            if (this.selectedBlockId === block.id) {
+                this.selectedBlockId = null;
+            }
             return true;
         }
 
@@ -351,9 +703,82 @@
         initUI() {
             this.buildColorGrid();
             this.buildShapeGrid();
+            this.buildBlockPropertySelects();
+            this.buildKeyLockSelects();
             this.renderLayers();
             this.renderCarsConfig();
             this.renderValidation();
+        }
+
+        buildBlockPropertySelects() {
+            const colorSelect = document.getElementById('select-block-color');
+            const shapeSelect = document.getElementById('select-block-shape');
+
+            if (colorSelect) {
+                colorSelect.innerHTML = '';
+
+                for (const color of COLOR_NAMES) {
+                    const option = document.createElement('option');
+                    option.value = color;
+                    option.textContent = color;
+                    colorSelect.appendChild(option);
+                }
+            }
+
+            if (shapeSelect) {
+                shapeSelect.innerHTML = '';
+
+                for (const shapeName of Object.keys(SHAPES)) {
+                    const option = document.createElement('option');
+                    option.value = shapeName;
+                    option.textContent = shapeName;
+                    shapeSelect.appendChild(option);
+                }
+            }
+
+            this.refreshBlockLayerSelect();
+        }
+
+        refreshBlockLayerSelect() {
+            const layerSelect = document.getElementById('select-block-layer');
+            if (!layerSelect) return;
+
+            const previousValue = layerSelect.value;
+            layerSelect.innerHTML = '';
+
+            for (const layer of [...this.levelData.layers].sort((a, b) => a.index - b.index)) {
+                const option = document.createElement('option');
+                option.value = String(layer.index);
+                option.textContent = `L${layer.index}`;
+                layerSelect.appendChild(option);
+            }
+
+            if ([...layerSelect.options].some(option => option.value === previousValue)) {
+                layerSelect.value = previousValue;
+            }
+        }
+
+        buildKeyLockSelects() {
+            const selects = [
+                document.getElementById('select-key-color'),
+                document.getElementById('select-lock-color'),
+            ].filter(Boolean);
+
+            for (const select of selects) {
+                select.innerHTML = '';
+
+                const none = document.createElement('option');
+                none.value = '';
+                none.textContent = 'none';
+                select.appendChild(none);
+
+                for (const color of COLOR_NAMES) {
+                    const option = document.createElement('option');
+                    option.value = color;
+                    option.textContent = color;
+                    select.appendChild(option);
+                }
+            }
         }
 
         buildColorGrid() {
@@ -424,9 +849,15 @@
             container.innerHTML = '';
             const sorted = [...this.levelData.layers].sort((a, b) => b.index - a.index);
             for (const layer of sorted) {
+                const visible = this.isLayerVisible(layer.index);
                 const el = document.createElement('div');
-                el.className = 'layer-item' + (layer.index === this.activeLayer ? ' active' : '');
+                el.className = [
+                    'layer-item',
+                    layer.index === this.activeLayer ? 'active' : '',
+                    visible ? '' : 'hidden',
+                ].filter(Boolean).join(' ');
                 el.innerHTML = `
+                    <button class="layer-visibility" data-layer="${layer.index}" title="${visible ? 'Hide layer' : 'Show layer'}">${visible ? 'ON' : 'OFF'}</button>
                     <span class="layer-badge">L${layer.index}</span>
                     <span class="layer-info">${layer.blocks.length} blocks</span>
                     ${this.levelData.layers.length > 1
@@ -434,20 +865,28 @@
                         : ''}
                 `;
                 el.addEventListener('click', (e) => {
+                    if (e.target.closest('.layer-visibility')) {
+                        const idx = parseInt(e.target.closest('.layer-visibility').dataset.layer);
+                        this.toggleLayerVisibility(idx);
+                        return;
+                    }
+
                     if (e.target.classList.contains('layer-delete')) {
                         const idx = parseInt(e.target.dataset.layer);
+                        const selectedRecord = this.getSelectedBlockRecord();
                         this.levelData.layers = this.levelData.layers.filter(l => l.index !== idx);
+                        this.hiddenLayers.delete(idx);
+                        if (selectedRecord && selectedRecord.layerIndex === idx) {
+                            this.selectedBlockId = null;
+                        }
                         if (this.activeLayer === idx) {
                             this.activeLayer = this.levelData.layers[0]?.index || 0;
                         }
-                        this.renderLayers();
-                        this.renderGrid();
-                        this.renderValidation();
+                        this.renderAll();
                         return;
                     }
                     this.activeLayer = layer.index;
-                    this.renderLayers();
-                    this.renderGrid();
+                    this.renderAll();
                 });
                 container.appendChild(el);
             }
@@ -515,7 +954,7 @@
                     const car = carsInCol[i];
                     const carIndex = this.levelData.cars.indexOf(car);
                     const item = document.createElement('div');
-                    item.className = 'car-item';
+                    item.className = 'car-item' + (car.hidden ? ' is-hidden' : '');
                     item.draggable = true;
                     item.dataset.carIndex = carIndex;
                     item.title = 'Drag to reorder this car';
@@ -535,9 +974,17 @@
                     handle.textContent = '☰';
                     item.appendChild(handle);
 
+                    // Color dot (with ? overlay when hidden)
                     const dot = document.createElement('div');
-                    dot.className = 'car-color-dot';
+                    dot.className = 'car-color-dot' + (car.hidden ? ' mystery' : '');
                     dot.style.background = hexToCSS(COLORS[car.color]?.hex || 0x888888);
+                    if (car.hidden) {
+                        dot.title = 'Hidden Car — revealed when active';
+                        const qMark = document.createElement('span');
+                        qMark.className = 'car-mystery-q';
+                        qMark.textContent = '?';
+                        dot.appendChild(qMark);
+                    }
                     item.appendChild(dot);
 
                     // Color select
@@ -569,6 +1016,23 @@
                     });
                     capInput.addEventListener('mousedown', (e) => e.stopPropagation());
                     item.appendChild(capInput);
+
+                    // Hidden checkbox
+                    const hiddenLabel = document.createElement('label');
+                    hiddenLabel.className = 'car-hidden-label';
+                    hiddenLabel.title = 'Mystery Car: shows "?" in queue, reveals when active';
+                    const hiddenCheck = document.createElement('input');
+                    hiddenCheck.type = 'checkbox';
+                    hiddenCheck.checked = !!car.hidden;
+                    hiddenCheck.addEventListener('change', () => {
+                        car.hidden = hiddenCheck.checked;
+                        this.renderCarsConfig();
+                        this.renderValidation();
+                    });
+                    hiddenCheck.addEventListener('mousedown', (e) => e.stopPropagation());
+                    hiddenLabel.appendChild(hiddenCheck);
+                    hiddenLabel.appendChild(document.createTextNode('🎭'));
+                    item.appendChild(hiddenLabel);
 
                     // Queue label
                     const qLabel = document.createElement('span');
@@ -602,7 +1066,7 @@
                     this.levelData.cars.push({
                         column: col,
                         color: this.selectedColor,
-                        capacity: 8,
+                        capacity: DEFAULT_CAR_CAPACITY,
                         queueOrder: nextQueue,
                     });
                     this.normalizeCarQueueOrders();
@@ -626,7 +1090,7 @@
                 for (const block of layer.blocks) {
                     const shape = SHAPES[block.shape];
                     if (!shape) continue;
-                    const cubes = shape.unitCount * (CONFIG.CUBES_PER_CELL || 4);
+                    const cubes = shape.unitCount * CUBES_PER_CELL;
                     cubesPerColor[block.color] = (cubesPerColor[block.color] || 0) + cubes;
                 }
             }
@@ -668,6 +1132,25 @@
                 container.innerHTML = '<div style="font-size:12px;color:#6666888;">No blocks or cars yet</div>';
             }
 
+            const keyLockWarnings = this.getKeyLockMatchWarnings();
+            for (const message of keyLockWarnings) {
+                allPass = false;
+
+                const row = document.createElement('div');
+                row.className = 'validation-row fail key-lock-validation';
+
+                const icon = document.createElement('span');
+                icon.className = 'v-icon';
+                icon.textContent = '!';
+                row.appendChild(icon);
+
+                const text = document.createElement('span');
+                text.textContent = message;
+                row.appendChild(text);
+
+                container.appendChild(row);
+            }
+
             // Update status dot
             const dot = document.getElementById('status-dot');
             dot.className = 'status-dot' + (allPass && allColors.size > 0 ? '' : ' error');
@@ -695,6 +1178,8 @@
             // Draw blocks from bottom layer to top
             const sortedLayers = [...this.levelData.layers].sort((a, b) => a.index - b.index);
             for (const layer of sortedLayers) {
+                if (!this.isLayerVisible(layer.index)) continue;
+
                 const isActive = layer.index === this.activeLayer;
                 const alpha = isActive ? 1.0 : 0.35;
                 for (const block of layer.blocks) {
@@ -705,6 +1190,20 @@
             // Hover preview
             if (this.hoverCell && this.tool === 'draw') {
                 this.drawPreview(ctx, this.hoverCell.row, this.hoverCell.col);
+            }
+
+            if (this.dragPreview) {
+                const record = this.findBlockRecordById(this.dragPreview.blockId);
+
+                if (record) {
+                    this.drawBlockPlacementPreview(
+                        ctx,
+                        record.block,
+                        this.dragPreview.row,
+                        this.dragPreview.col,
+                        this.dragPreview.valid
+                    );
+                }
             }
 
             // Erase highlight
@@ -773,6 +1272,7 @@
             const color = COLORS[block.color];
             if (!color) return;
             const cells = this.getBlockCells(block);
+            const frozenCount = Math.max(0, parseInt(block.frozenCount || 0, 10) || 0);
 
             for (const cell of cells) {
                 if (cell.row < 0 || cell.row >= GRID_ROWS || cell.col < 0 || cell.col >= GRID_COLS) continue;
@@ -795,6 +1295,22 @@
                 ctx.fillStyle = hexToRGBA(color.dark, 0.5);
                 ctx.fillRect(x + 3, y + s - 4, s - 6, 3);
 
+                // Frozen Countdown overlay
+                if (frozenCount > 0) {
+                    ctx.globalAlpha = alpha * 0.62;
+                    ctx.fillStyle = '#BDEEFF';
+                    this.roundRect(ctx, x + 1, y + 1, s, s, rad);
+                    ctx.fill();
+
+                    ctx.globalAlpha = alpha * 0.85;
+                    ctx.strokeStyle = '#FFFFFF';
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([4, 3]);
+                    this.roundRect(ctx, x + 4, y + 4, s - 6, s - 6, rad);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+
                 // Layer badge (small number)
                 if (layerIndex > 0) {
                     ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -804,6 +1320,63 @@
                 }
 
                 ctx.globalAlpha = 1;
+            }
+
+            if (frozenCount > 0 && cells.length > 0) {
+                const validCells = cells.filter(c => c.row >= 0 && c.row < GRID_ROWS && c.col >= 0 && c.col < GRID_COLS);
+                const avgCol = validCells.reduce((sum, c) => sum + c.col, 0) / Math.max(1, validCells.length);
+                const avgRow = validCells.reduce((sum, c) => sum + c.row, 0) / Math.max(1, validCells.length);
+                const cx = GRID_PAD + avgCol * CELL_PX + CELL_PX / 2;
+                const cy = GRID_PAD + avgRow * CELL_PX + CELL_PX / 2;
+
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = '#DDF8FF';
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(cx, cy, 15, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#1E5A78';
+                ctx.font = 'bold 18px Outfit';
+                ctx.textAlign = 'center';
+                ctx.fillText(String(frozenCount), cx, cy + 6);
+                ctx.globalAlpha = 1;
+            }
+
+            if ((block.keyColor || block.lockColor) && cells.length > 0) {
+                const validCells = cells.filter(c => c.row >= 0 && c.row < GRID_ROWS && c.col >= 0 && c.col < GRID_COLS);
+                if (validCells.length > 0) {
+                    const minCol = Math.min(...validCells.map(c => c.col));
+                    const maxCol = Math.max(...validCells.map(c => c.col));
+                    const minRow = Math.min(...validCells.map(c => c.row));
+                    const maxRow = Math.max(...validCells.map(c => c.row));
+
+                    if (block.lockColor) {
+                        this.drawMetaBadge(
+                            ctx,
+                            GRID_PAD + (maxCol + 1) * CELL_PX - 12,
+                            GRID_PAD + minRow * CELL_PX + 12,
+                            block.lockColor,
+                            'L',
+                            alpha,
+                            '#FFFFFF'
+                        );
+                    }
+
+                    if (block.keyColor) {
+                        this.drawMetaBadge(
+                            ctx,
+                            GRID_PAD + (maxCol + 1) * CELL_PX - 12,
+                            GRID_PAD + (maxRow + 1) * CELL_PX - 12,
+                            block.keyColor,
+                            'K',
+                            alpha,
+                            '#F7DC6F'
+                        );
+                    }
+                }
             }
 
             // Block ID label (on first cell)
@@ -818,6 +1391,23 @@
                 ctx.fillText(block.id, x0 + 4, y0 + 13);
                 ctx.globalAlpha = 1;
             }
+        }
+
+        drawMetaBadge(ctx, cx, cy, colorName, text, alpha, strokeStyle) {
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = hexToCSS(COLORS[colorName]?.hex || 0x888888);
+            ctx.strokeStyle = strokeStyle;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 10px Outfit';
+            ctx.textAlign = 'center';
+            ctx.fillText(text, cx, cy + 4);
+            ctx.globalAlpha = 1;
         }
 
         drawPreview(ctx, row, col) {
@@ -850,6 +1440,36 @@
             }
         }
 
+        drawBlockPlacementPreview(ctx, block, row, col, isValid) {
+            const shapeDef = SHAPES[block.shape];
+            const color = COLORS[block.color];
+            if (!shapeDef || !color) return;
+
+            for (const [dr, dc] of shapeDef.cells) {
+                const cr = row + dr;
+                const cc = col + dc;
+                if (cr < 0 || cr >= GRID_ROWS || cc < 0 || cc >= GRID_COLS) continue;
+
+                const x = GRID_PAD + cc * CELL_PX;
+                const y = GRID_PAD + cr * CELL_PX;
+                const s = CELL_PX - 2;
+
+                ctx.globalAlpha = 0.56;
+                ctx.fillStyle = isValid ? hexToCSS(color.hex) : '#E74C3C';
+                this.roundRect(ctx, x + 1, y + 1, s, s, 5);
+                ctx.fill();
+
+                ctx.globalAlpha = 0.95;
+                ctx.strokeStyle = isValid ? '#F1C40F' : '#E74C3C';
+                ctx.lineWidth = 2.5;
+                ctx.setLineDash([5, 3]);
+                this.roundRect(ctx, x + 1, y + 1, s, s, 5);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.globalAlpha = 1;
+            }
+        }
+
         roundRect(ctx, x, y, w, h, r) {
             ctx.beginPath();
             ctx.moveTo(x + r, y);
@@ -869,7 +1489,98 @@
             this.renderLayers();
             this.renderCarsConfig();
             this.renderValidation();
+            this.updateFrozenPanel();
             this.updateStatusBar();
+        }
+
+        getCanvasCellFromEvent(e) {
+            const rect = this.canvas.getBoundingClientRect();
+            const scaleX = this.canvas.width / rect.width;
+            const scaleY = this.canvas.height / rect.height;
+            const mx = (e.clientX - rect.left) * scaleX;
+            const my = (e.clientY - rect.top) * scaleY;
+
+            const col = Math.floor((mx - GRID_PAD) / CELL_PX);
+            const row = Math.floor((my - GRID_PAD) / CELL_PX);
+
+            if (row < 0 || row >= GRID_ROWS || col < 0 || col >= GRID_COLS) {
+                return null;
+            }
+
+            return { row, col };
+        }
+
+        beginBlockDrag(block, layerIndex, cell) {
+            this.selectedBlockId = block.id;
+            this.activeLayer = layerIndex;
+            this.selectedColor = block.color;
+            this.selectedShape = block.shape;
+            this.draggedBlockId = block.id;
+            this.dragStartCell = { ...cell };
+            this.dragStartPosition = {
+                row: block.row,
+                col: block.col,
+            };
+            this.dragPreview = {
+                blockId: block.id,
+                row: block.row,
+                col: block.col,
+                valid: true,
+            };
+            this.buildColorGrid();
+            this.buildShapeGrid();
+            this.renderAll();
+        }
+
+        updateBlockDrag(cell) {
+            if (!this.draggedBlockId || !this.dragStartCell || !this.dragStartPosition || !cell) return;
+
+            const record = this.findBlockRecordById(this.draggedBlockId);
+            if (!record) return;
+
+            const row = this.dragStartPosition.row + (cell.row - this.dragStartCell.row);
+            const col = this.dragStartPosition.col + (cell.col - this.dragStartCell.col);
+            const valid = this.canPlaceBlock(
+                record.block.shape,
+                row,
+                col,
+                record.block.id,
+                record.layerIndex
+            );
+
+            this.dragPreview = {
+                blockId: record.block.id,
+                row,
+                col,
+                valid,
+            };
+            this.renderGrid();
+        }
+
+        endBlockDrag() {
+            if (!this.draggedBlockId) return;
+
+            const preview = this.dragPreview;
+            const record = this.findBlockRecordById(this.draggedBlockId);
+            const moved = record &&
+                preview &&
+                preview.valid &&
+                (record.block.row !== preview.row || record.block.col !== preview.col);
+
+            if (moved) {
+                record.block.row = preview.row;
+                record.block.col = preview.col;
+                this.showToast(`${record.block.id} moved to ${preview.row}, ${preview.col}`);
+            } else if (preview && !preview.valid) {
+                this.showToast('Cannot move block there', true);
+            }
+
+            this.draggedBlockId = null;
+            this.dragStartCell = null;
+            this.dragStartPosition = null;
+            this.dragPreview = null;
+            this.suppressNextClick = true;
+            this.renderAll();
         }
 
         // ───────────────────────────────────────
@@ -878,22 +1589,21 @@
 
         initCanvasEvents() {
             this.canvas.addEventListener('mousemove', (e) => {
-                const rect = this.canvas.getBoundingClientRect();
-                const scaleX = this.canvas.width / rect.width;
-                const scaleY = this.canvas.height / rect.height;
-                const mx = (e.clientX - rect.left) * scaleX;
-                const my = (e.clientY - rect.top) * scaleY;
+                const cell = this.getCanvasCellFromEvent(e);
 
-                const col = Math.floor((mx - GRID_PAD) / CELL_PX);
-                const row = Math.floor((my - GRID_PAD) / CELL_PX);
-
-                if (row >= 0 && row < GRID_ROWS && col >= 0 && col < GRID_COLS) {
-                    this.hoverCell = { row, col };
-                    document.getElementById('grid-info').textContent = `Row: ${row}  Col: ${col}`;
+                if (cell) {
+                    this.hoverCell = cell;
+                    document.getElementById('grid-info').textContent = `Row: ${cell.row}  Col: ${cell.col}`;
                 } else {
                     this.hoverCell = null;
                     document.getElementById('grid-info').textContent = 'Hover over grid to see coordinates';
                 }
+
+                if (this.draggedBlockId) {
+                    this.updateBlockDrag(cell);
+                    return;
+                }
+
                 this.renderGrid();
             });
 
@@ -902,7 +1612,28 @@
                 this.renderGrid();
             });
 
+            this.canvas.addEventListener('mousedown', (e) => {
+                if (e.button !== 0 || this.tool !== 'select') return;
+
+                const cell = this.getCanvasCellFromEvent(e);
+                if (!cell) return;
+
+                const found = this.findBlockAtAnyLayer(cell.row, cell.col);
+                if (!found) return;
+
+                this.beginBlockDrag(found.block, found.layerIndex, cell);
+            });
+
+            window.addEventListener('mouseup', () => {
+                this.endBlockDrag();
+            });
+
             this.canvas.addEventListener('click', (e) => {
+                if (this.suppressNextClick) {
+                    this.suppressNextClick = false;
+                    return;
+                }
+
                 if (!this.hoverCell) return;
                 const { row, col } = this.hoverCell;
 
@@ -930,7 +1661,7 @@
                         this.showToast(`Selected ${found.block.id} (${found.block.shape} ${found.block.color})`);
                     } else {
                         this.selectedBlockId = null;
-                        this.renderGrid();
+                        this.renderAll();
                     }
                 }
             });
@@ -955,13 +1686,11 @@
             document.getElementById('tool-buttons').addEventListener('click', (e) => {
                 const btn = e.target.closest('.tool-btn');
                 if (!btn) return;
-                this.tool = btn.dataset.tool;
+                const nextTool = btn.dataset.tool;
                 this.selectedBlockId = null;
-                document.querySelectorAll('#tool-buttons .tool-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                this.canvas.style.cursor = this.tool === 'draw' ? 'crosshair'
-                    : this.tool === 'erase' ? 'not-allowed' : 'pointer';
+                this.setActiveTool(nextTool);
                 this.updateStatusBar();
+                this.updateFrozenPanel();
                 this.renderGrid();
             });
 
@@ -999,6 +1728,40 @@
             syncInput('input-booster-shuffle', 'boosters.shuffle');
             syncInput('input-booster-paint', 'boosters.paintGun');
 
+            document.getElementById('select-block-color').addEventListener('change', (e) => {
+                this.setSelectedBlockColor(e.target.value);
+            });
+
+            document.getElementById('select-block-shape').addEventListener('change', (e) => {
+                this.setSelectedBlockShape(e.target.value);
+            });
+
+            document.getElementById('select-block-layer').addEventListener('change', (e) => {
+                this.setSelectedBlockLayer(e.target.value);
+            });
+
+            // Frozen Countdown controls
+            document.getElementById('btn-apply-frozen').addEventListener('click', () => {
+                const value = document.getElementById('input-frozen-count').value;
+                this.setSelectedBlockFrozenCount(value);
+            });
+
+            document.getElementById('btn-clear-frozen').addEventListener('click', () => {
+                this.setSelectedBlockFrozenCount(0);
+            });
+
+            document.getElementById('select-key-color').addEventListener('change', (e) => {
+                this.setSelectedBlockKeyColor(e.target.value || null);
+            });
+
+            document.getElementById('select-lock-color').addEventListener('change', (e) => {
+                this.setSelectedBlockLockColor(e.target.value || null);
+            });
+
+            document.getElementById('btn-rotate-block').addEventListener('click', () => {
+                this.rotateSelectedBlock();
+            });
+
             // Header buttons
             document.getElementById('btn-new').addEventListener('click', () => {
                 if (!confirm('Create new level? Current data will be lost.')) return;
@@ -1006,6 +1769,7 @@
                 this.activeLayer = 0;
                 this.blockIdCounter = 1;
                 this.selectedBlockId = null;
+                this.hiddenLayers.clear();
                 this.syncSettingsToUI();
                 this.renderCarsConfig();
                 this.renderAll();
@@ -1080,6 +1844,13 @@
             const data = JSON.parse(JSON.stringify(this.levelData));
             // Clean up: ensure ids are unique, sort layers and cars
             data.layers.sort((a, b) => a.index - b.index);
+            for (const layer of data.layers) {
+                for (const block of layer.blocks || []) {
+                    if (!COLOR_NAMES.includes(block.keyColor)) delete block.keyColor;
+                    if (!COLOR_NAMES.includes(block.lockColor)) delete block.lockColor;
+                    if (block.keyColor && block.lockColor) delete block.lockColor;
+                }
+            }
             data.cars.sort((a, b) => a.column - b.column || a.queueOrder - b.queueOrder);
             return JSON.stringify(data, null, 4);
         }
@@ -1112,17 +1883,81 @@
             });
         }
 
-        importFromText(text) {
-            // Try to parse as raw JSON or extract from JS file
-            let json = text.trim();
+        extractBalancedJSON(text, opener, closer) {
+            const start = text.indexOf(opener);
+            if (start === -1) return null;
 
-            // If it's a JS file like levels.js, try to extract the first object
-            if (json.startsWith('window.') || json.startsWith('//')) {
-                const match = json.match(/\{[\s\S]*\}/);
-                if (match) json = match[0];
+            let depth = 0;
+            let inString = false;
+            let escaped = false;
+
+            for (let i = start; i < text.length; i++) {
+                const ch = text[i];
+
+                if (inString) {
+                    if (escaped) {
+                        escaped = false;
+                    } else if (ch === '\\') {
+                        escaped = true;
+                    } else if (ch === '"') {
+                        inString = false;
+                    }
+                    continue;
+                }
+
+                if (ch === '"') {
+                    inString = true;
+                    continue;
+                }
+
+                if (ch === opener) {
+                    depth++;
+                } else if (ch === closer) {
+                    depth--;
+                    if (depth === 0) {
+                        return text.slice(start, i + 1);
+                    }
+                }
             }
 
-            const data = JSON.parse(json);
+            return null;
+        }
+
+        parseImportedLevelText(text) {
+            const raw = text
+                .trim()
+                .replace(/^```(?:json|js|javascript)?\s*/i, '')
+                .replace(/\s*```$/i, '')
+                .trim();
+
+            const candidates = [
+                raw,
+                this.extractBalancedJSON(raw, '[', ']'),
+                this.extractBalancedJSON(raw, '{', '}'),
+            ].filter(Boolean);
+
+            let lastError = null;
+
+            for (const candidate of candidates) {
+                try {
+                    const parsed = JSON.parse(candidate);
+
+                    if (Array.isArray(parsed)) {
+                        const firstLevel = parsed.find(item => item && item.layers && item.cars);
+                        if (firstLevel) return firstLevel;
+                    } else if (parsed && parsed.layers && parsed.cars) {
+                        return parsed;
+                    }
+                } catch (err) {
+                    lastError = err;
+                }
+            }
+
+            throw lastError || new Error('Invalid level format: missing layers or cars');
+        }
+
+        importFromText(text) {
+            const data = this.parseImportedLevelText(text);
 
             // Validate basic structure
             if (!data.layers || !data.cars) {
@@ -1130,6 +1965,7 @@
             }
 
             this.levelData = data;
+            this.hiddenLayers.clear();
             this.levelData.conveyorCapacity ??= CONFIG.CONVEYOR_CAPACITY;
             this.levelData.funnelCapacity ??= CONFIG.FUNNEL_CAPACITY;
             this.levelData.boosters ??= { magnet: 10, shuffle: 10, paintGun: 10 };
@@ -1145,9 +1981,35 @@
                 for (const block of layer.blocks) {
                     const num = parseInt(block.id.replace(/\D/g, ''));
                     if (num > maxId) maxId = num;
+
+                    const frozen = Math.max(0, parseInt(block.frozenCount || 0, 10) || 0);
+                    if (frozen > 0) {
+                        block.frozenCount = frozen;
+                    } else {
+                        delete block.frozenCount;
+                    }
+
+                    if (!COLOR_NAMES.includes(block.keyColor)) {
+                        delete block.keyColor;
+                    }
+
+                    if (!COLOR_NAMES.includes(block.lockColor)) {
+                        delete block.lockColor;
+                    }
+
+                    if (block.keyColor && block.lockColor) {
+                        delete block.lockColor;
+                    }
                 }
             }
             this.blockIdCounter = maxId + 1;
+
+            // Normalise hidden flag on cars (may be missing on old levels)
+            for (const car of this.levelData.cars) {
+                if (car.hidden !== true) {
+                    delete car.hidden;
+                }
+            }
 
             this.syncSettingsToUI();
             this.buildColorGrid();
@@ -1301,9 +2163,19 @@
 
         updateStatusBar() {
             const totalBlocks = this.getAllBlocks().length;
+            const selected = this.getSelectedBlockRecord();
+            const frozenText = selected && selected.block.frozenCount > 0
+                ? ` | Frozen ${selected.block.frozenCount}`
+                : '';
+            const keyText = selected && selected.block.keyColor
+                ? ` | Key ${selected.block.keyColor}`
+                : '';
+            const lockText = selected && selected.block.lockColor
+                ? ` | Lock ${selected.block.lockColor}`
+                : '';
             document.getElementById('status-blocks').textContent = `Blocks: ${totalBlocks}`;
             document.getElementById('status-selection').textContent =
-                `Tool: ${this.tool} | ${this.selectedColor} ${this.selectedShape} | Layer ${this.activeLayer}`;
+                `Tool: ${this.tool} | ${this.selectedColor} ${this.selectedShape} | Layer ${this.activeLayer}${frozenText}${keyText}${lockText}`;
         }
 
         showToast(msg, isError) {

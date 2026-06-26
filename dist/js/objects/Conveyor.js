@@ -276,46 +276,25 @@ window.Conveyor = class Conveyor {
         entry.cube.state = 'MATCHING';
         this.removeCube(entry);
 
-        const sprite = entry.cube.sprite;
+        // Tween cube to car position
         const carPos = car.getAbsorbPosition();
-        const midX = CONFIG.GAME_WIDTH / 2;
-        const midY = CONFIG.CUBE_ABSORB_MID_Y ?? CONFIG.GAME_HEIGHT / 2;
-        const totalDuration = CONFIG.CUBE_ABSORB_DURATION ?? 740;
-        const liftDuration = CONFIG.CUBE_ABSORB_LIFT_DURATION ?? Math.round(totalDuration * 0.38);
-        const returnDuration = CONFIG.CUBE_ABSORB_RETURN_DURATION ?? Math.max(120, totalDuration - liftDuration);
-
-        sprite.setDepth(35);
-
         this.scene.tweens.add({
-            targets: sprite,
-            x: midX,
-            y: midY,
-            scaleX: 1.15,
-            scaleY: 1.15,
-            alpha: 1,
-            duration: liftDuration,
-            ease: 'Sine.easeOut',
+            targets: entry.cube.sprite,
+            x: carPos.x,
+            y: carPos.y,
+            scaleX: 0.5,
+            scaleY: 0.5,
+            alpha: 0.7,
+            duration: CONFIG.CUBE_ABSORB_DURATION ?? 380,
+            ease: 'Power2',
             onComplete: () => {
-                this.scene.tweens.add({
-                    targets: sprite,
-                    x: carPos.x,
-                    y: carPos.y,
-                    scaleX: 0.5,
-                    scaleY: 0.5,
-                    alpha: 0.7,
-                    duration: returnDuration,
-                    ease: 'Sine.easeIn',
-                    onComplete: () => {
-                        sprite.setVisible(false);
-                        sprite.setDepth(15);
-                        entry.cube.state = 'DONE';
-                        const isFull = car.addCube();
-                        if (isFull && !car.isExiting) {
-                            this.scene.events.emit('carFull', car);
-                        }
-                    }
-                });
-            },
+                entry.cube.sprite.setVisible(false);
+                entry.cube.state = 'DONE';
+                const isFull = car.addCube();
+                if (isFull && !car.isExiting) {
+                    this.scene.events.emit('carFull', car);
+                }
+            }
         });
     }
 

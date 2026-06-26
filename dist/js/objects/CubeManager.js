@@ -106,16 +106,21 @@ window.CubeManager = class CubeManager {
             const cellX = CONFIG.BOARD_OFFSET_X + cell.col * CONFIG.CELL_SIZE + CONFIG.CELL_DRAW / 2;
             const cellY = CONFIG.BOARD_OFFSET_Y + cell.row * CONFIG.CELL_SIZE + CONFIG.CELL_DRAW / 2;
 
-            for (let i = 0; i < CONFIG.CUBES_PER_CELL; i++) {
+            const cubesPerCell = CONFIG.CUBES_PER_CELL || 4;
+            const burstRadius = Math.max(5, CONFIG.CELL_SIZE * 0.22);
+
+            for (let i = 0; i < cubesPerCell; i++) {
                 const cube = this.acquire(block.color);
 
-                const offX = (i % 2 === 0 ? -1 : 1) * (4 + Math.random() * 4);
-                const offY = (i < 2 ? -1 : 1) * (4 + Math.random() * 4);
+                const angle = (Math.PI * 2 * i) / cubesPerCell;
+                const jitter = 0.75 + Math.random() * 0.35;
+                const offX = Math.cos(angle) * burstRadius * jitter;
+                const offY = Math.sin(angle) * burstRadius * jitter;
 
                 cube.sprite.setPosition(cellX + offX, cellY + offY);
 
-                cube.vx = (Math.random() - 0.5) * 150;
-                cube.vy = -(60 + Math.random() * 100);
+                cube.vx = Math.cos(angle) * 120 + (Math.random() - 0.5) * 45;
+                cube.vy = Math.sin(angle) * 80 - (70 + Math.random() * 70);
 
                 this.scene.time.delayedCall(CONFIG.CUBE_BURST_DELAY, () => {
                     if (!cube || cube.state === 'INACTIVE') return;
