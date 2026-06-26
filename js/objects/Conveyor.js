@@ -3,10 +3,10 @@
 // ============================================================
 
 window.Conveyor = class Conveyor {
-    constructor(scene) {
+    constructor(scene, capacity = CONFIG.CONVEYOR_CAPACITY) {
         this.scene = scene;
         this.cubesOnBelt = [];
-        this.capacity = CONFIG.CONVEYOR_CAPACITY;
+        this.capacity = capacity ?? CONFIG.CONVEYOR_CAPACITY;
         this.speedMultiplier = 1;
         this.trackGfx = null;
         this.beltOffset = 0;

@@ -1786,8 +1786,7 @@
                 const reader = new FileReader();
                 reader.onload = (evt) => {
                     try {
-                        this.importFromText(evt.target.result);
-                        this.showToast('Level imported!');
+                        this.importFromFile(evt.target.result);
                     } catch (err) {
                         this.showToast('Import failed: ' + err.message, true);
                     }
@@ -2016,6 +2015,75 @@
             this.buildShapeGrid();
             this.renderCarsConfig();
             this.renderAll();
+        }
+
+        // Entry point for file import — handles both single level and array of levels.
+        importFromFile(text) {
+            const raw = text
+                .trim()
+                .replace(/^```(?:json|js|javascript)?\s*/i, '')
+                .replace(/\s*```$/i, '')
+                .trim();
+
+            const candidates = [
+                raw,
+                this.extractBalancedJSON(raw, '[', ']'),
+                this.extractBalancedJSON(raw, '{', '}'),
+            ].filter(Boolean);
+
+            let lastError = null;
+
+            for (const candidate of candidates) {
+                try {
+                    const parsed = JSON.parse(candidate);
+
+                    if (Array.isArray(parsed)) {
+                        const validLevels = parsed.filter(item => item && item.layers && item.cars);
+                        if (validLevels.length > 0) {
+                            this.importLevelsToBank(validLevels);
+                            return;
+                        }
+                    } else if (parsed && parsed.layers && parsed.cars) {
+                        this.importFromText(candidate);
+                        this.showToast('Level imported!');
+                        return;
+                    }
+                } catch (err) {
+                    lastError = err;
+                }
+            }
+
+            throw lastError || new Error('Invalid level format: missing layers or cars');
+        }
+
+        // Import an array of levels into the Level Bank and load the first one into the editor.
+        importLevelsToBank(levels) {
+            const bank = this.getLevelBank();
+            let added = 0;
+            let updated = 0;
+
+            for (const level of levels) {
+                const existingIdx = bank.findIndex(l => l.id === level.id);
+                if (existingIdx !== -1) {
+                    bank[existingIdx] = level;
+                    updated++;
+                } else {
+                    bank.push(level);
+                    added++;
+                }
+            }
+
+            bank.sort((a, b) => a.id - b.id);
+            this.saveLevelBank(bank);
+            this.renderBankList();
+
+            // Load the first level into the editor
+            this.importFromText(JSON.stringify(levels[0]));
+
+            const msg = updated > 0
+                ? `${added + updated} levels imported (${updated} updated) — Bank refreshed`
+                : `${added} levels imported to Bank`;
+            this.showToast(msg);
         }
 
         playTest() {
