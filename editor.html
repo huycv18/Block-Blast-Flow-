@@ -49,6 +49,22 @@
                     <div class="panel-section-title">Block Properties</div>
                     <div class="frozen-editor-box block-props-panel">
                         <div class="frozen-editor-hint" id="frozen-selected-label">Select a block to edit properties.</div>
+                        <div class="key-lock-row">
+                            <label>
+                                <span>Color</span>
+                                <select id="select-block-color"></select>
+                            </label>
+                            <label>
+                                <span>Shape</span>
+                                <select id="select-block-shape"></select>
+                            </label>
+                        </div>
+                        <div class="key-lock-row">
+                            <label>
+                                <span>Layer</span>
+                                <select id="select-block-layer"></select>
+                            </label>
+                        </div>
                         <div class="frozen-editor-row">
                             <input type="number" id="input-frozen-count" min="0" max="99" value="0">
                             <button class="btn btn-primary btn-sm" id="btn-apply-frozen">Apply</button>
@@ -63,6 +79,9 @@
                                 <span>Lock</span>
                                 <select id="select-lock-color"></select>
                             </label>
+                        </div>
+                        <div class="block-actions-row">
+                            <button class="btn btn-outline btn-sm btn-block" id="btn-rotate-block">Rotate Block</button>
                         </div>
                         <div class="frozen-editor-note">Rule: each blasted Block reduces this number by 1. At 0, the Block becomes normal.</div>
                         <div class="key-lock-warning" id="key-lock-warning"></div>

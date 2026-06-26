@@ -342,6 +342,12 @@ html, body {
     border-color: rgba(247, 220, 111, 0.45);
 }
 
+.block-actions-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+}
+
 .shape-preview-cell.filled {
     background: var(--accent-light);
 }
