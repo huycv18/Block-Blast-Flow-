@@ -107,7 +107,9 @@ window.CarManager = class CarManager {
 
         if (!col) return;
 
+        window.SoundMgr?.carFull();
         await car.exitAnimation();
+        window.SoundMgr?.carExit();
 
         col.active = null;
 
@@ -183,6 +185,22 @@ window.CarManager = class CarManager {
         for (const color of colorSet) {
             if (this.findMatchingActiveCar(color) !== null) {
                 return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Check if ANY car — active or still in queue — will ever accept one of these colors.
+    // Used for board-level deadlock detection before cubes even reach the conveyor.
+    canAnyCarEverAccept(colorSet) {
+        for (const color of colorSet) {
+            for (const col of this.columns) {
+                if (col.active && col.active.canAccept(color)) return true;
+
+                for (const car of col.queue) {
+                    if (car.canAccept(color)) return true;
+                }
             }
         }
 
@@ -660,7 +678,7 @@ window.CarManager = class CarManager {
             car.setPosition(x, y);
             car.container.setVisible(true);
 
-            // Queue sâu cũng hiện lên tạm trong Paint Gun để người chơi thấy nó được fill.
+            // Deep-queue cars are temporarily shown so the player sees cubes flying in.
             car.container.setAlpha(CONFIG.CAR_ROW2_ALPHA || 0.72);
             car.container.setScale(CONFIG.CAR_ROW2_SCALE || 0.82);
             car.container.setDepth(22);
@@ -675,15 +693,14 @@ window.CarManager = class CarManager {
     async resolvePaintGunFullCars(color) {
         this.isResolvingPaintGun = true;
 
-        // Update fill visual một lần nữa cho chắc.
+        // Refresh fill visuals to make sure they're up to date.
         for (const car of this.getPaintGunCandidateCars(color)) {
             if (car.updateFillVisual) {
                 car.updateFillVisual();
             }
         }
 
-        // Xử lý lần lượt để tránh queue/active bị nhảy cùng lúc quá lỗi.
-        // Nhưng fill đã diễn ra cùng lúc rồi.
+        // Process one at a time to prevent queue/active advancing simultaneously — fill already happened simultaneously.
         let loopGuard = 0;
 
         while (loopGuard < 50) {
@@ -702,7 +719,7 @@ window.CarManager = class CarManager {
     }
 
     findNextFullPaintGunCar(color) {
-        // Active full xử lý trước để queue tiến lên đúng logic.
+        // Active cars exit first so the queue advances correctly.
         for (const col of this.columns) {
             const car = col.active;
 
@@ -714,7 +731,7 @@ window.CarManager = class CarManager {
             }
         }
 
-        // Sau đó xử lý queue full.
+        // Then handle full queue cars.
         for (const col of this.columns) {
             for (const car of col.queue) {
                 if (car &&

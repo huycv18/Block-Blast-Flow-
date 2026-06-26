@@ -88,6 +88,31 @@ window.GameStateManager = class GameStateManager {
             }
         }
 
+        // Board-level deadlock (only meaningful during PLAYING, when board still has blocks).
+        if (this.state === 'PLAYING' && board && !board.isEmpty() && !flowBusy) {
+            const conveyorIdle = conveyor.getCurrentLoad() === 0;
+            const funnelIdle = !funnel || funnel.getCubeCount() === 0;
+            const noCubes = !cubeManager || cubeManager.getActiveCubes().length === 0;
+
+            if (conveyorIdle && funnelIdle && noCubes) {
+                const pullableBlocks = board.getPullableBlocks ? board.getPullableBlocks() : [];
+
+                // No pullable blocks at all — complete deadlock, nothing to tap.
+                if (pullableBlocks.length === 0) {
+                    this.enterLose();
+                    return true;
+                }
+
+                // All pullable block colors have no matching car anywhere (active or queue).
+                const pullableColors = new Set(pullableBlocks.map(b => b.color));
+
+                if (!carManager.canAnyCarEverAccept(pullableColors)) {
+                    this.enterLose();
+                    return true;
+                }
+            }
+        }
+
         return false;
     }
 
@@ -119,36 +144,44 @@ window.GameStateManager = class GameStateManager {
 
     enterWin() {
         this.setState('WIN');
+        window.SoundMgr?.stopMusic(0.6);
+        window.SoundMgr?.winJingle();
 
-        this.scene.cameras.main.flash(300, 255, 255, 255, true);
-        this.scene.cameras.main.shake(200, 0.01);
+        this.scene.cameras.main.flash(420, 255, 255, 255, true);
+        this.scene.cameras.main.shake(180, 0.008);
 
         const cx = CONFIG.GAME_WIDTH / 2;
         const cy = CONFIG.GAME_HEIGHT / 2;
 
-        const emitter = this.scene.add.particles(cx, cy, 'particle_star', {
-            speed: { min: 150, max: 400 },
-            angle: { min: 0, max: 360 },
-            scale: { start: 1, end: 0 },
-            lifespan: 1200,
-            quantity: 30,
-            gravityY: 200,
-        });
+        const spawnBurst = (x, y, delay, tints) => {
+            this.scene.time.delayedCall(delay, () => {
+                if (!this.scene || !this.scene.add) return;
+                const e = this.scene.add.particles(x, y, 'particle_star', {
+                    speed: { min: 170, max: 460 },
+                    angle: { min: 0, max: 360 },
+                    scale: { start: 1.1, end: 0 },
+                    lifespan: 1300,
+                    quantity: 22,
+                    gravityY: 250,
+                    tint: tints,
+                });
+                e.setDepth(85);
+                this.scene.time.delayedCall(400, () => { if (e && e.stop) e.stop(); });
+                this.scene.time.delayedCall(2100, () => { if (e && e.destroy) e.destroy(); });
+            });
+        };
 
-        emitter.setDepth(80);
-
-        this.scene.time.delayedCall(500, () => {
-            if (emitter && emitter.stop) emitter.stop();
-        });
-
-        this.scene.time.delayedCall(2000, () => {
-            if (emitter && emitter.destroy) emitter.destroy();
-        });
+        spawnBurst(cx,      cy - 50,  0,   [0xFFD700, 0xFFFFFF, 0xFFAFD2]);
+        spawnBurst(cx - 90, cy + 40, 190,  [0x2ECC71, 0x3498DB, 0xFFFFFF]);
+        spawnBurst(cx + 90, cy + 40, 360,  [0xE74C3C, 0xF1C40F, 0x9B59B6]);
     }
 
     enterLose() {
         this.setState('LOSE');
-        this.scene.cameras.main.shake(300, 0.02);
+        window.SoundMgr?.stopMusic(0.4);
+        window.SoundMgr?.loseSfx();
+        this.scene.cameras.main.flash(240, 210, 25, 25, true);
+        this.scene.cameras.main.shake(340, 0.022);
     }
 
     // ----------------------------------------------------------
@@ -195,18 +228,17 @@ window.GameStateManager = class GameStateManager {
 
         this.scene.cameras.main.flash(160, 120, 220, 255, true);
 
-        // Nếu có cube đang bay vào car từ Conveyor thì reservedCount có thể đang giữ slot ảo.
-        // Revive sẽ tự xử lý lại toàn bộ cube, nên reset reserved trước khi allocate.
+        // Cubes still in flight from the Conveyor may hold virtual reserved slots — reset before re-allocating.
         this.resetAllCarReservations(carManager);
 
-        // Lấy toàn bộ cube hiện đang tồn tại trong gameplay.
+        // Gather all cubes currently alive in the gameplay systems.
         const reviveCubes = this.collectAllReviveCubes({
             conveyor,
             funnel,
             cubeManager,
         });
 
-        // Reset Conveyor/Funnel logic sau khi đã lấy cube ra.
+        // Reset Conveyor/Funnel state after cubes have been extracted.
         if (conveyor) {
             if (conveyor.setSpeedMultiplier) {
                 conveyor.setSpeedMultiplier(1);
@@ -223,7 +255,7 @@ window.GameStateManager = class GameStateManager {
             return true;
         }
 
-        // Cho toàn bộ cube bay ào ạt vào cars giống Booster 3.
+        // Send all cubes bursting into cars simultaneously.
         await this.sendReviveCubesToCarsBurst(reviveCubes, carManager, cubeManager);
 
         this.setState('PLAYING');
@@ -405,9 +437,8 @@ window.GameStateManager = class GameStateManager {
                 }
             }
 
-            // Nếu có cube không allocate được do level data thiếu capacity,
-            // vẫn phải release để tránh kẹt object cũ.
-            // Trường hợp level đúng capacity thì đoạn này sẽ không chạy.
+            // Release any unallocated cubes to avoid stale pooled objects.
+            // This path only runs when level data has insufficient car capacity.
             for (let i = cubeIndex; i < cubes.length; i++) {
                 const item = cubes[i];
 
@@ -433,8 +464,7 @@ window.GameStateManager = class GameStateManager {
 
         await Promise.all(allFlyPromises);
 
-        // Sau khi toàn bộ cube bay xong, xử lý car full.
-        // Fill diễn ra cùng lúc, nhưng exit xử lý lần lượt để không phá queue.
+        // Resolve full cars after the whole burst lands. Fill is simultaneous; exits are sequential to preserve queue order.
         for (const color of colorsToResolve) {
             await this.resolveFullCarsAfterRevive(color, carManager);
         }
@@ -657,13 +687,13 @@ window.GameStateManager = class GameStateManager {
     async resolveFullCarsAfterRevive(color, carManager) {
         if (!carManager) return;
 
-        // Nếu CarManager đã có logic của Booster3 thì dùng lại.
+        // Reuse PaintGun's full-car resolution if available.
         if (carManager.resolvePaintGunFullCars) {
             await carManager.resolvePaintGunFullCars(color);
             return;
         }
 
-        // Fallback an toàn.
+        // Safe fallback.
         let guard = 0;
 
         while (guard < 50) {
