@@ -336,6 +336,13 @@ window.GameScene = class GameScene extends Phaser.Scene {
         this.scene.restart({ levelIndex: this.currentLevel });
     }
 
+    selectLevel(index) {
+        if (index < 0 || index >= LEVELS.length) return;
+        this.cleanup();
+        this.currentLevel = index;
+        this.scene.restart({ levelIndex: index });
+    }
+
     async revive() {
     await this.gameState.revive({
         conveyor: this.conveyor,

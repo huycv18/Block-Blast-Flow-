@@ -14,6 +14,7 @@ window.UIScene = class UIScene extends Phaser.Scene {
         this.createBoosterButtons();
         this.createConveyorBar();
         this.createModals();
+        this.createLevelSelectModal();
         this.setupEventListeners();
     }
 
@@ -28,10 +29,11 @@ window.UIScene = class UIScene extends Phaser.Scene {
         bg.fillStyle(THEME.UI_PANEL, 0.8);
         bg.fillRect(0, 0, hw, hh);
 
-        // Settings button
+        // Settings button — opens level select
         const settingsBtn = this.add.image(28, hh / 2, 'settings_icon')
             .setInteractive({ useHandCursor: true })
             .setDepth(100);
+        settingsBtn.on('pointerdown', () => this.openLevelSelect());
 
         // Level info
         const levelData = LEVELS[this.gameScene.currentLevel];
@@ -284,6 +286,172 @@ window.UIScene = class UIScene extends Phaser.Scene {
         });
 
         return { container };
+    }
+
+    // --- Level Select ---
+
+    openLevelSelect() {
+        if (!this.levelSelectModal) return;
+        const currentLevel = this.gameScene?.currentLevel || 0;
+        this.levelSelectModal.setPage(Math.floor(currentLevel / 6));
+        this.levelSelectModal.container.setVisible(true);
+    }
+
+    createLevelSelectModal() {
+        const LEVELS_PER_PAGE = 6;
+        let currentPage = 0;
+
+        const cx = CONFIG.GAME_WIDTH / 2;
+        const cy = CONFIG.GAME_HEIGHT / 2;
+        const pw = 340;
+        const ph = 460;
+        const panelTop = cy - ph / 2;
+        const panelLeft = cx - pw / 2;
+
+        const outerContainer = this.add.container(0, 0).setDepth(600).setVisible(false);
+
+        // Dim overlay
+        const dim = this.add.graphics();
+        dim.fillStyle(0x000000, 0.72);
+        dim.fillRect(0, 0, CONFIG.GAME_WIDTH, CONFIG.GAME_HEIGHT);
+        dim.setInteractive(
+            new Phaser.Geom.Rectangle(0, 0, CONFIG.GAME_WIDTH, CONFIG.GAME_HEIGHT),
+            Phaser.Geom.Rectangle.Contains
+        );
+        outerContainer.add(dim);
+
+        // Panel background
+        const panel = this.add.graphics();
+        panel.fillStyle(0x1E1E2E, 1);
+        panel.fillRoundedRect(panelLeft, panelTop, pw, ph, 16);
+        panel.lineStyle(2, THEME.UI_PANEL_BORDER, 1);
+        panel.strokeRoundedRect(panelLeft, panelTop, pw, ph, 16);
+        outerContainer.add(panel);
+
+        // Title
+        const titleText = this.add.text(cx, panelTop + 28, 'Chọn Level', {
+            fontFamily: 'Outfit', fontSize: '20px', fontStyle: 'bold',
+            color: '#FFFFFF', resolution: 2,
+        }).setOrigin(0.5);
+        outerContainer.add(titleText);
+
+        // Card container (inserted before UI controls so cards render below them)
+        const cardContainer = this.add.container(0, 0);
+        outerContainer.add(cardContainer);
+
+        // Close button
+        const clX = panelLeft + pw - 24, clY = panelTop + 24;
+        const closeBg = this.add.graphics();
+        closeBg.fillStyle(0x444455, 1);
+        closeBg.fillCircle(clX, clY, 13);
+        const closeText = this.add.text(clX, clY, '✕', {
+            fontFamily: 'Outfit', fontSize: '14px', color: '#DDDDEE', resolution: 2,
+        }).setOrigin(0.5);
+        const closeZone = this.add.zone(clX, clY, 28, 28).setInteractive({ useHandCursor: true });
+        closeZone.on('pointerdown', () => outerContainer.setVisible(false));
+        outerContainer.add(closeBg);
+        outerContainer.add(closeText);
+        outerContainer.add(closeZone);
+
+        // Pagination controls
+        const pageY = panelTop + ph - 30;
+        const pageText = this.add.text(cx, pageY, '', {
+            fontFamily: 'Outfit', fontSize: '12px', color: '#888899', resolution: 2,
+        }).setOrigin(0.5);
+        outerContainer.add(pageText);
+
+        const prevText = this.add.text(panelLeft + 44, pageY, '◀ Prev', {
+            fontFamily: 'Outfit', fontSize: '13px', fontStyle: 'bold', color: '#7777AA', resolution: 2,
+        }).setOrigin(0.5);
+        const prevZone = this.add.zone(panelLeft + 44, pageY, 68, 30).setInteractive({ useHandCursor: true });
+        prevZone.on('pointerdown', () => {
+            if (currentPage > 0) { currentPage--; buildPage(currentPage); }
+        });
+        outerContainer.add(prevText);
+        outerContainer.add(prevZone);
+
+        const nextText = this.add.text(panelLeft + pw - 44, pageY, 'Next ▶', {
+            fontFamily: 'Outfit', fontSize: '13px', fontStyle: 'bold', color: '#7777AA', resolution: 2,
+        }).setOrigin(0.5);
+        const nextZone = this.add.zone(panelLeft + pw - 44, pageY, 68, 30).setInteractive({ useHandCursor: true });
+        nextZone.on('pointerdown', () => {
+            const totalPages = Math.ceil((window.LEVELS || []).length / LEVELS_PER_PAGE);
+            if (currentPage < totalPages - 1) { currentPage++; buildPage(currentPage); }
+        });
+        outerContainer.add(nextText);
+        outerContainer.add(nextZone);
+
+        // Card layout constants
+        const cardAreaTop = panelTop + 55;
+        const cardAreaLeft = panelLeft + 15;
+        const cardAreaW = pw - 30;
+        const cols = 2;
+        const cardW = (cardAreaW - 10) / 2;
+        const cardH = 78;
+        const gapX = 10;
+        const gapY = 10;
+        const diffColors = { Tutorial: '#2ECC71', Easy: '#3498DB', Normal: '#F1C40F', Hard: '#E74C3C' };
+
+        const buildPage = (page) => {
+            cardContainer.removeAll(true);
+
+            const levels = window.LEVELS || [];
+            const totalPages = Math.ceil(levels.length / LEVELS_PER_PAGE);
+            pageText.setText(totalPages > 1 ? `${page + 1} / ${totalPages}` : '');
+            prevText.setAlpha(page > 0 ? 1 : 0.3);
+            nextText.setAlpha(page < totalPages - 1 ? 1 : 0.3);
+
+            const startIdx = page * LEVELS_PER_PAGE;
+            const endIdx = Math.min(startIdx + LEVELS_PER_PAGE, levels.length);
+
+            for (let i = startIdx; i < endIdx; i++) {
+                const level = levels[i];
+                const localIdx = i - startIdx;
+                const col = localIdx % cols;
+                const row = Math.floor(localIdx / cols);
+                const x = cardAreaLeft + col * (cardW + gapX);
+                const y = cardAreaTop + row * (cardH + gapY);
+                const isCurrentLevel = i === (this.gameScene?.currentLevel || 0);
+
+                const cardBg = this.add.graphics();
+                cardBg.fillStyle(isCurrentLevel ? THEME.BOOSTER_BG : 0x2A2A3A, 1);
+                cardBg.fillRoundedRect(x, y, cardW, cardH, 10);
+                if (isCurrentLevel) {
+                    cardBg.lineStyle(2, 0x7AAFFF, 1);
+                    cardBg.strokeRoundedRect(x, y, cardW, cardH, 10);
+                }
+                cardContainer.add(cardBg);
+
+                const numText = this.add.text(x + cardW / 2, y + 26, `Level ${level.id}`, {
+                    fontFamily: 'Outfit', fontSize: '15px', fontStyle: 'bold',
+                    color: '#FFFFFF', resolution: 2,
+                }).setOrigin(0.5);
+                cardContainer.add(numText);
+
+                const dText = this.add.text(x + cardW / 2, y + 50, level.difficulty, {
+                    fontFamily: 'Outfit', fontSize: '11px',
+                    color: diffColors[level.difficulty] || '#AAAACC', resolution: 2,
+                }).setOrigin(0.5);
+                cardContainer.add(dText);
+
+                const zone = this.add.zone(x + cardW / 2, y + cardH / 2, cardW, cardH)
+                    .setInteractive({ useHandCursor: true });
+                const levelIdx = i;
+                zone.on('pointerdown', () => {
+                    outerContainer.setVisible(false);
+                    this.gameScene.selectLevel(levelIdx);
+                });
+                cardContainer.add(zone);
+            }
+        };
+
+        buildPage(0);
+
+        this.levelSelectModal = {
+            container: outerContainer,
+            setPage: (page) => { currentPage = page; buildPage(page); },
+            rebuild: () => buildPage(currentPage),
+        };
     }
 
     // --- Events ---
