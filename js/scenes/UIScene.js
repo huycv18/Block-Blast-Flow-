@@ -34,7 +34,10 @@ window.UIScene = class UIScene extends Phaser.Scene {
         const settingsBtn = this.add.image(28, hh / 2, 'settings_icon')
             .setInteractive({ useHandCursor: true })
             .setDepth(100);
-        settingsBtn.on('pointerdown', () => this.openSettingsModal());
+        settingsBtn.on('pointerdown', () => {
+            window.SoundMgr?.buttonClick();
+            this.openSettingsModal();
+        });
 
         // Level select button
         const lvlBtnX = 66;
@@ -46,7 +49,26 @@ window.UIScene = class UIScene extends Phaser.Scene {
         }).setOrigin(0.5).setDepth(101);
         const lvlBtnZone = this.add.zone(lvlBtnX, hh / 2, 30, 26)
             .setInteractive({ useHandCursor: true }).setDepth(102);
-        lvlBtnZone.on('pointerdown', () => this.openLevelSelect());
+        lvlBtnZone.on('pointerdown', () => {
+            window.SoundMgr?.buttonClick();
+            this.openLevelSelect();
+        });
+
+        // Mute toggle button
+        const muteBtnX = 106;
+        const muteBg = this.add.graphics().setDepth(100);
+        muteBg.fillStyle(THEME.BOOSTER_BG, 1);
+        muteBg.fillRoundedRect(muteBtnX - 15, hh / 2 - 13, 30, 26, 7);
+        this.muteBtnIcon = this.add.text(muteBtnX, hh / 2, window.SoundMgr?.muted ? '🔇' : '🔊', {
+            fontSize: '14px', resolution: 2,
+        }).setOrigin(0.5).setDepth(101);
+        const muteBtnZone = this.add.zone(muteBtnX, hh / 2, 30, 26)
+            .setInteractive({ useHandCursor: true }).setDepth(102);
+        muteBtnZone.on('pointerdown', () => {
+            const muted = window.SoundMgr?.toggleMute();
+            if (this.muteBtnIcon) this.muteBtnIcon.setText(muted ? '🔇' : '🔊');
+            if (!muted) window.SoundMgr?.buttonClick();
+        });
 
         // Level info
         const levelData = LEVELS[this.gameScene.currentLevel];
@@ -147,6 +169,8 @@ window.UIScene = class UIScene extends Phaser.Scene {
     onBoosterTap(key) {
         const gs = this.gameScene;
         if (!gs || gs.gameState.isInputLocked()) return;
+
+        window.SoundMgr?.boosterActivate();
 
         if (key === 'magnet') {
             gs.boosterManager.activateMagnet(gs.board);
@@ -294,7 +318,10 @@ window.UIScene = class UIScene extends Phaser.Scene {
 
             // Hitzone
             const zone = this.add.zone(bx, by, 120, 36).setInteractive({ useHandCursor: true });
-            zone.on('pointerdown', btn.callback);
+            zone.on('pointerdown', () => {
+                window.SoundMgr?.buttonClick();
+                btn.callback();
+            });
             container.add(zone);
         });
 
@@ -351,7 +378,10 @@ window.UIScene = class UIScene extends Phaser.Scene {
             fontFamily: 'Outfit', fontSize: '13px', color: '#DDDDEE', resolution: 2,
         }).setOrigin(0.5);
         const closeZone = this.add.zone(clX, clY, 26, 26).setInteractive({ useHandCursor: true });
-        closeZone.on('pointerdown', () => container.setVisible(false));
+        closeZone.on('pointerdown', () => {
+            window.SoundMgr?.buttonClick();
+            container.setVisible(false);
+        });
         container.add(closeBg);
         container.add(closeText);
         container.add(closeZone);
@@ -373,6 +403,7 @@ window.UIScene = class UIScene extends Phaser.Scene {
         }).setOrigin(0.5);
         const restartZone = this.add.zone(cx, btnY, 200, 44).setInteractive({ useHandCursor: true });
         restartZone.on('pointerdown', () => {
+            window.SoundMgr?.buttonClick();
             container.setVisible(false);
             this.gameScene.retryLevel();
         });
@@ -559,9 +590,29 @@ window.UIScene = class UIScene extends Phaser.Scene {
         gs.events.on('stateChange', (newState) => {
             if (newState === 'WIN') {
                 this.cleanupText.setVisible(false);
-                this.winModal.container.setVisible(true);
+                const winModal = this.winModal.container;
+                winModal.setVisible(true);
+                winModal.setAlpha(0);
+                winModal.setY(24);
+                this.tweens.add({
+                    targets: winModal,
+                    alpha: 1,
+                    y: 0,
+                    duration: 300,
+                    ease: 'Back.easeOut',
+                });
             } else if (newState === 'LOSE') {
-                this.loseModal.container.setVisible(true);
+                const loseModal = this.loseModal.container;
+                loseModal.setVisible(true);
+                loseModal.setAlpha(0);
+                loseModal.setY(24);
+                this.tweens.add({
+                    targets: loseModal,
+                    alpha: 1,
+                    y: 0,
+                    duration: 280,
+                    ease: 'Back.easeOut',
+                });
             } else if (newState === 'CLEANUP') {
                 this.cleanupText.setVisible(true);
                 this.tweens.add({
@@ -585,5 +636,7 @@ window.UIScene = class UIScene extends Phaser.Scene {
 
     update() {
         this.updateConveyorBar();
+        const pct = this.gameScene?.conveyor?.getLoadPercent() ?? 0;
+        if (pct >= CONFIG.CONV_DANGER) window.SoundMgr?.conveyorWarn();
     }
 };

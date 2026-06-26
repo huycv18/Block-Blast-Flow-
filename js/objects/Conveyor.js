@@ -234,12 +234,10 @@ window.Conveyor = class Conveyor {
         if (!carManager) return;
 
         const speed = CONFIG.CONVEYOR_SPEED * this.speedMultiplier * (delta / 1000);
-
         const absorbRadius = CONFIG.CAR_ABSORB_RADIUS;
         const metrics = this.getPathMetrics();
-        // Only absorb cubes on the bottom edge of the belt (t in bottom segment)
         const botStart = metrics.topFrac + metrics.rightFrac;
-        const botEnd   = botStart + metrics.botFrac;
+        const botEnd = botStart + metrics.botFrac;
 
         for (let i = this.cubesOnBelt.length - 1; i >= 0; i--) {
             const entry = this.cubesOnBelt[i];
@@ -248,31 +246,23 @@ window.Conveyor = class Conveyor {
             entry.pathT += speed;
             if (entry.pathT >= 1) {
                 entry.pathT -= 1;
-                // Reset absorb set on full loop so cube can try cars again
                 entry.absorbedByCars = new Set();
             }
 
-            // Update screen position
             const pos = this.getPathPosition(entry.pathT);
             entry.cube.sprite.setPosition(pos.x, pos.y);
 
-            // Only check absorb on bottom segment of belt
             const t = entry.pathT;
             const onBottom = (t >= botStart && t <= botEnd);
             if (!onBottom) continue;
 
-            // Car-based absorb zone: check X distance to each active car
             const activeCars = carManager.getActiveCars();
 
             for (const car of activeCars) {
-                // Skip if already tried this car in the current lap
                 if (!entry.absorbedByCars) entry.absorbedByCars = new Set();
                 if (entry.absorbedByCars.has(car)) continue;
-
-                // Color must match
                 if (car.color !== entry.color) continue;
 
-                // X-distance between cube and car column center
                 const carPos = car.getAbsorbPosition();
                 const dx = Math.abs(pos.x - carPos.x);
 
@@ -282,17 +272,13 @@ window.Conveyor = class Conveyor {
                         this.matchCubeWithCar(entry, car);
                         break;
                     } else {
-                        // Car is full — skip this car this lap
                         entry.absorbedByCars.add(car);
                     }
                 }
             }
         }
 
-        // Update belt animation
         this.beltOffset += speed * 50;
-
-        // Update warning visual
         this.updateWarningVisual();
     }
 
@@ -300,25 +286,56 @@ window.Conveyor = class Conveyor {
         entry.cube.state = 'MATCHING';
         this.removeCube(entry);
 
-        // Tween cube to car position
+        const sprite = entry.cube.sprite;
         const carPos = car.getAbsorbPosition();
+        const scatterX = (Math.random() - 0.5) * (CONFIG.CAR_WIDTH * 0.65);
+        const scatterY = (Math.random() - 0.5) * 14;
+
+        window.SoundMgr?.cubeAbsorb(Math.random());
+
+        const fromX = sprite.x;
+        const fromY = sprite.y;
+        const toX = carPos.x + scatterX;
+        const toY = carPos.y + scatterY;
+
+        // Quadratic Bezier control point: above the midpoint for a jump arc
+        const cpX = (fromX + toX) * 0.5;
+        const cpY = Math.min(fromY, toY) - 65;
+
+        const duration = CONFIG.CUBE_ABSORB_DURATION ?? 200;
+        const progress = { t: 0 };
+
+        // Arc position tween via Bezier
         this.scene.tweens.add({
-            targets: entry.cube.sprite,
-            x: carPos.x,
-            y: carPos.y,
-            scaleX: 0.5,
-            scaleY: 0.5,
-            alpha: 0.7,
-            duration: CONFIG.CUBE_ABSORB_DURATION ?? 380,
-            ease: 'Power2',
+            targets: progress,
+            t: 1,
+            duration,
+            ease: 'Quad.easeIn',
+            onUpdate: () => {
+                const t = progress.t;
+                const mt = 1 - t;
+                sprite.x = mt * mt * fromX + 2 * mt * t * cpX + t * t * toX;
+                sprite.y = mt * mt * fromY + 2 * mt * t * cpY + t * t * toY;
+            },
             onComplete: () => {
-                entry.cube.sprite.setVisible(false);
+                sprite.setVisible(false);
                 entry.cube.state = 'DONE';
                 const isFull = car.addCube();
                 if (isFull && !car.isExiting) {
                     this.scene.events.emit('carFull', car);
                 }
-            }
+            },
+        });
+
+        // Spin + shrink while flying
+        this.scene.tweens.add({
+            targets: sprite,
+            angle: Phaser.Math.Between(200, 340) * (Math.random() > 0.5 ? 1 : -1),
+            scaleX: 0.15,
+            scaleY: 0.15,
+            alpha: 0.85,
+            duration,
+            ease: 'Cubic.easeIn',
         });
     }
 

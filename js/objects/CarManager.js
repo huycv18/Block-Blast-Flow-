@@ -107,7 +107,9 @@ window.CarManager = class CarManager {
 
         if (!col) return;
 
+        window.SoundMgr?.carFull();
         await car.exitAnimation();
+        window.SoundMgr?.carExit();
 
         col.active = null;
 

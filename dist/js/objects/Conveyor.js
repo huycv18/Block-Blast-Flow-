@@ -3,12 +3,14 @@
 // ============================================================
 
 window.Conveyor = class Conveyor {
-    constructor(scene) {
+    constructor(scene, capacity = CONFIG.CONVEYOR_CAPACITY) {
         this.scene = scene;
         this.cubesOnBelt = [];
-        this.capacity = CONFIG.CONVEYOR_CAPACITY;
+        this.capacity = capacity ?? CONFIG.CONVEYOR_CAPACITY;
         this.speedMultiplier = 1;
         this.trackGfx = null;
+        this.warningOverlay = null;
+        this.warningState = 'none'; // 'none' | 'warning' | 'danger'
         this.beltOffset = 0;
         this.warningTween = null;
 
@@ -58,6 +60,28 @@ window.Conveyor = class Conveyor {
 
         // Direction arrows on track
         this.drawDirectionArrows(g);
+
+        this._initWarningOverlay();
+    }
+
+    _initWarningOverlay() {
+        const g = this.scene.add.graphics();
+        g.setDepth(6); // above trackGfx
+        g.setAlpha(0);
+        this.warningOverlay = g;
+    }
+
+    _drawOverlay(color) {
+        const g = this.warningOverlay;
+        g.clear();
+        g.fillStyle(color, 1);
+        g.fillRoundedRect(
+            this.cx - this.hw,
+            this.cy - this.hh,
+            this.hw * 2,
+            this.hh * 2,
+            this.cr
+        );
     }
 
     drawDirectionArrows(g) {
@@ -111,16 +135,16 @@ window.Conveyor = class Conveyor {
     }
 
     getTopPathTForX(x) {
-    const metrics = this.getPathMetrics();
-    const leftX = this.cx - metrics.straightW;
-    const topFrac = Phaser.Math.Clamp(
-        (x - leftX) / (metrics.straightW * 2),
-        0,
-        1
-    );
+        const metrics = this.getPathMetrics();
+        const leftX = this.cx - metrics.straightW;
+        const topFrac = Phaser.Math.Clamp(
+            (x - leftX) / (metrics.straightW * 2),
+            0,
+            1
+        );
 
-    return topFrac * metrics.topFrac;
-}
+        return topFrac * metrics.topFrac;
+    }
 
     /** Returns the t value for the center of the top edge (entry point from Funnel). */
     getEntryT() {
@@ -210,12 +234,10 @@ window.Conveyor = class Conveyor {
         if (!carManager) return;
 
         const speed = CONFIG.CONVEYOR_SPEED * this.speedMultiplier * (delta / 1000);
-
         const absorbRadius = CONFIG.CAR_ABSORB_RADIUS;
         const metrics = this.getPathMetrics();
-        // Only absorb cubes on the bottom edge of the belt (t in bottom segment)
         const botStart = metrics.topFrac + metrics.rightFrac;
-        const botEnd   = botStart + metrics.botFrac;
+        const botEnd = botStart + metrics.botFrac;
 
         for (let i = this.cubesOnBelt.length - 1; i >= 0; i--) {
             const entry = this.cubesOnBelt[i];
@@ -224,31 +246,23 @@ window.Conveyor = class Conveyor {
             entry.pathT += speed;
             if (entry.pathT >= 1) {
                 entry.pathT -= 1;
-                // Reset absorb set on full loop so cube can try cars again
                 entry.absorbedByCars = new Set();
             }
 
-            // Update screen position
             const pos = this.getPathPosition(entry.pathT);
             entry.cube.sprite.setPosition(pos.x, pos.y);
 
-            // Only check absorb on bottom segment of belt
             const t = entry.pathT;
             const onBottom = (t >= botStart && t <= botEnd);
             if (!onBottom) continue;
 
-            // Car-based absorb zone: check X distance to each active car
             const activeCars = carManager.getActiveCars();
 
             for (const car of activeCars) {
-                // Skip if already tried this car in the current lap
                 if (!entry.absorbedByCars) entry.absorbedByCars = new Set();
                 if (entry.absorbedByCars.has(car)) continue;
-
-                // Color must match
                 if (car.color !== entry.color) continue;
 
-                // X-distance between cube and car column center
                 const carPos = car.getAbsorbPosition();
                 const dx = Math.abs(pos.x - carPos.x);
 
@@ -258,17 +272,13 @@ window.Conveyor = class Conveyor {
                         this.matchCubeWithCar(entry, car);
                         break;
                     } else {
-                        // Car is full — skip this car this lap
                         entry.absorbedByCars.add(car);
                     }
                 }
             }
         }
 
-        // Update belt animation
         this.beltOffset += speed * 50;
-
-        // Update warning visual
         this.updateWarningVisual();
     }
 
@@ -276,57 +286,114 @@ window.Conveyor = class Conveyor {
         entry.cube.state = 'MATCHING';
         this.removeCube(entry);
 
-        // Tween cube to car position
+        const sprite = entry.cube.sprite;
         const carPos = car.getAbsorbPosition();
+        const scatterX = (Math.random() - 0.5) * (CONFIG.CAR_WIDTH * 0.65);
+        const scatterY = (Math.random() - 0.5) * 14;
+
+        window.SoundMgr?.cubeAbsorb(Math.random());
+
+        const fromX = sprite.x;
+        const fromY = sprite.y;
+        const toX = carPos.x + scatterX;
+        const toY = carPos.y + scatterY;
+
+        // Quadratic Bezier control point: above the midpoint for a jump arc
+        const cpX = (fromX + toX) * 0.5;
+        const cpY = Math.min(fromY, toY) - 65;
+
+        const duration = CONFIG.CUBE_ABSORB_DURATION ?? 200;
+        const progress = { t: 0 };
+
+        // Arc position tween via Bezier
         this.scene.tweens.add({
-            targets: entry.cube.sprite,
-            x: carPos.x,
-            y: carPos.y,
-            scaleX: 0.5,
-            scaleY: 0.5,
-            alpha: 0.7,
-            duration: CONFIG.CUBE_ABSORB_DURATION ?? 380,
-            ease: 'Power2',
+            targets: progress,
+            t: 1,
+            duration,
+            ease: 'Quad.easeIn',
+            onUpdate: () => {
+                const t = progress.t;
+                const mt = 1 - t;
+                sprite.x = mt * mt * fromX + 2 * mt * t * cpX + t * t * toX;
+                sprite.y = mt * mt * fromY + 2 * mt * t * cpY + t * t * toY;
+            },
             onComplete: () => {
-                entry.cube.sprite.setVisible(false);
+                sprite.setVisible(false);
                 entry.cube.state = 'DONE';
                 const isFull = car.addCube();
                 if (isFull && !car.isExiting) {
                     this.scene.events.emit('carFull', car);
                 }
-            }
+            },
+        });
+
+        // Spin + shrink while flying
+        this.scene.tweens.add({
+            targets: sprite,
+            angle: Phaser.Math.Between(200, 340) * (Math.random() > 0.5 ? 1 : -1),
+            scaleX: 0.15,
+            scaleY: 0.15,
+            alpha: 0.85,
+            duration,
+            ease: 'Cubic.easeIn',
         });
     }
 
     updateWarningVisual() {
         const pct = this.getLoadPercent();
 
-        if (pct >= CONFIG.CONV_DANGER && !this.warningTween) {
-            // Red flash
-            this.warningTween = this.scene.tweens.add({
-                targets: this.trackGfx,
-                alpha: 0.5,
-                duration: 300,
-                yoyo: true,
-                repeat: -1,
-            });
-        } else if (pct < CONFIG.CONV_DANGER && this.warningTween) {
+        if (pct >= CONFIG.CONV_DANGER) {
+            if (this.warningState !== 'danger') {
+                this.warningState = 'danger';
+                this._stopWarningTween();
+                this._drawOverlay(THEME.DANGER_RED);
+                // Fast pulse: 0.15 → 0.55 → 0.15
+                this.warningTween = this.scene.tweens.add({
+                    targets: this.warningOverlay,
+                    alpha: { from: 0.15, to: 0.55 },
+                    duration: 250,
+                    yoyo: true,
+                    repeat: -1,
+                    ease: 'Sine.easeInOut',
+                });
+            }
+        } else if (pct >= CONFIG.CONV_WARNING) {
+            if (this.warningState !== 'warning') {
+                this.warningState = 'warning';
+                this._stopWarningTween();
+                this._drawOverlay(THEME.WARNING_ORANGE);
+                // Slow pulse: 0.08 → 0.28 → 0.08
+                this.warningTween = this.scene.tweens.add({
+                    targets: this.warningOverlay,
+                    alpha: { from: 0.08, to: 0.28 },
+                    duration: 600,
+                    yoyo: true,
+                    repeat: -1,
+                    ease: 'Sine.easeInOut',
+                });
+            }
+        } else {
+            if (this.warningState !== 'none') {
+                this.warningState = 'none';
+                this._stopWarningTween();
+                if (this.warningOverlay) this.warningOverlay.setAlpha(0);
+            }
+        }
+    }
+
+    _stopWarningTween() {
+        if (this.warningTween) {
             this.warningTween.stop();
             this.warningTween = null;
-            this.trackGfx.setAlpha(1);
         }
     }
 
     resetWarningVisual() {
-    if (this.warningTween) {
-        this.warningTween.stop();
-        this.warningTween = null;
+        this._stopWarningTween();
+        this.warningState = 'none';
+        if (this.warningOverlay) this.warningOverlay.setAlpha(0);
+        if (this.trackGfx) this.trackGfx.setAlpha(1);
     }
-
-    if (this.trackGfx) {
-        this.trackGfx.setAlpha(1);
-    }
-}
 
     getCurrentLoad() {
         return this.cubesOnBelt.filter(e => e.cube.state === 'ON_CONVEYOR').length;
@@ -380,16 +447,16 @@ window.Conveyor = class Conveyor {
 }
 
     destroy() {
-    this.clear();
+        this.clear();
 
-    if (this.warningTween) {
-        this.warningTween.stop();
-        this.warningTween = null;
-    }
+        if (this.warningOverlay) {
+            this.warningOverlay.destroy();
+            this.warningOverlay = null;
+        }
 
-    if (this.trackGfx) {
-        this.trackGfx.destroy();
-        this.trackGfx = null;
+        if (this.trackGfx) {
+            this.trackGfx.destroy();
+            this.trackGfx = null;
+        }
     }
-}
 };

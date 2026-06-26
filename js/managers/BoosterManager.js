@@ -167,12 +167,13 @@ window.BoosterManager = class BoosterManager {
 
         // Snapshot before removing so only already-revealed blocks count down.
         const frozenCountdownTargets = board.getFrozenCountdownTargets
-            ? board.getFrozenCountdownTargets()
+            ? board.getFrozenCountdownTargets(block)
             : [];
 
         await block.shake();
         await block.liftUp();
 
+        window.SoundMgr?.cubeBurst();
         // Cubes still flow through Funnel/Conveyor per GDD.
         this.scene.cubeManager.spawnFromBlock(block);
 
@@ -284,7 +285,7 @@ window.BoosterManager = class BoosterManager {
         const topLayerTargets = this.getPaintGunTopLayerTargets(board);
         // Snapshot before Paint Gun removes blocks — newly revealed frozen blocks won't count down yet.
         const frozenCountdownTargets = board.getFrozenCountdownTargets
-            ? board.getFrozenCountdownTargets()
+            ? board.getFrozenCountdownTargets(block)
             : [];
 
         let resolvedBlastCount = 0;
@@ -367,6 +368,7 @@ window.BoosterManager = class BoosterManager {
                 await b.shake();
                 await b.liftUp();
 
+                window.SoundMgr?.cubeBurst();
                 board.removeBlock(b);
                 if (b.keyColor && board.activateKey) {
                     board.activateKey(b.keyColor, b);
@@ -426,13 +428,18 @@ window.BoosterManager = class BoosterManager {
         const flyPromises = [];
         let globalIndex = 0;
 
+        // Count total cubes to split into 2 rows
+        const totalCubes = allocations.reduce((sum, a) => sum + (a && a.amount > 0 ? a.amount : 0), 0);
+        const ROW_SIZE = Math.ceil(totalCubes / 2);
+        const INTRA_STAGGER = 55;  // ms between each cube within a row
+        const ROW_GAP = 320;       // ms before the second row starts
+
         for (const allocation of allocations) {
             const car = allocation.car;
             const amount = allocation.amount;
 
             if (!car || amount <= 0) continue;
 
-            // Show non-active queue cars temporarily so the player sees cubes fly in.
             if (carManager.prepareCarForPaintGunFill) {
                 carManager.prepareCarForPaintGunFill(car);
             }
@@ -440,8 +447,10 @@ window.BoosterManager = class BoosterManager {
             for (let i = 0; i < amount; i++) {
                 const source = sources[globalIndex % sources.length];
 
-                // Tiny stagger so cubes look like a burst, not a sequence.
-                const startDelay = Math.floor(globalIndex / 6) * 12 + Phaser.Math.Between(0, 18);
+                // Row 1 flies first, Row 2 starts after ROW_GAP
+                const startDelay = globalIndex < ROW_SIZE
+                    ? globalIndex * INTRA_STAGGER
+                    : ROW_GAP + (globalIndex - ROW_SIZE) * INTRA_STAGGER;
 
                 flyPromises.push(
                     this.flyPaintCubeToCarBurst(color, source, car, globalIndex, startDelay)
@@ -496,7 +505,7 @@ window.BoosterManager = class BoosterManager {
                     y: midY,
                     scaleX: 0.78,
                     scaleY: 0.78,
-                    duration: 90,
+                    duration: 160,
                     ease: 'Quad.easeOut',
                     onComplete: () => {
                         if (!sprite || !sprite.scene) {
@@ -511,7 +520,7 @@ window.BoosterManager = class BoosterManager {
                             scaleX: 0.48,
                             scaleY: 0.48,
                             alpha: 0.95,
-                            duration: 130 + (index % 5) * 8,
+                            duration: 220 + (index % 5) * 12,
                             ease: 'Cubic.easeIn',
                             onComplete: () => {
                                 if (sprite && sprite.destroy) sprite.destroy();

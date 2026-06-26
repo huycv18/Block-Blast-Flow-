@@ -144,36 +144,44 @@ window.GameStateManager = class GameStateManager {
 
     enterWin() {
         this.setState('WIN');
+        window.SoundMgr?.stopMusic(0.6);
+        window.SoundMgr?.winJingle();
 
-        this.scene.cameras.main.flash(300, 255, 255, 255, true);
-        this.scene.cameras.main.shake(200, 0.01);
+        this.scene.cameras.main.flash(420, 255, 255, 255, true);
+        this.scene.cameras.main.shake(180, 0.008);
 
         const cx = CONFIG.GAME_WIDTH / 2;
         const cy = CONFIG.GAME_HEIGHT / 2;
 
-        const emitter = this.scene.add.particles(cx, cy, 'particle_star', {
-            speed: { min: 150, max: 400 },
-            angle: { min: 0, max: 360 },
-            scale: { start: 1, end: 0 },
-            lifespan: 1200,
-            quantity: 30,
-            gravityY: 200,
-        });
+        const spawnBurst = (x, y, delay, tints) => {
+            this.scene.time.delayedCall(delay, () => {
+                if (!this.scene || !this.scene.add) return;
+                const e = this.scene.add.particles(x, y, 'particle_star', {
+                    speed: { min: 170, max: 460 },
+                    angle: { min: 0, max: 360 },
+                    scale: { start: 1.1, end: 0 },
+                    lifespan: 1300,
+                    quantity: 22,
+                    gravityY: 250,
+                    tint: tints,
+                });
+                e.setDepth(85);
+                this.scene.time.delayedCall(400, () => { if (e && e.stop) e.stop(); });
+                this.scene.time.delayedCall(2100, () => { if (e && e.destroy) e.destroy(); });
+            });
+        };
 
-        emitter.setDepth(80);
-
-        this.scene.time.delayedCall(500, () => {
-            if (emitter && emitter.stop) emitter.stop();
-        });
-
-        this.scene.time.delayedCall(2000, () => {
-            if (emitter && emitter.destroy) emitter.destroy();
-        });
+        spawnBurst(cx,      cy - 50,  0,   [0xFFD700, 0xFFFFFF, 0xFFAFD2]);
+        spawnBurst(cx - 90, cy + 40, 190,  [0x2ECC71, 0x3498DB, 0xFFFFFF]);
+        spawnBurst(cx + 90, cy + 40, 360,  [0xE74C3C, 0xF1C40F, 0x9B59B6]);
     }
 
     enterLose() {
         this.setState('LOSE');
-        this.scene.cameras.main.shake(300, 0.02);
+        window.SoundMgr?.stopMusic(0.4);
+        window.SoundMgr?.loseSfx();
+        this.scene.cameras.main.flash(240, 210, 25, 25, true);
+        this.scene.cameras.main.shake(340, 0.022);
     }
 
     // ----------------------------------------------------------

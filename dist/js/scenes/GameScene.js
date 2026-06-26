@@ -92,6 +92,23 @@ window.GameScene = class GameScene extends Phaser.Scene {
         // Setup input
         this.setupInput();
 
+        // Cube collision SFX — play a tick when a physics cube hits a funnel wall
+        this._cubeCollisionHandler = (event) => {
+            if (!event.pairs || event.pairs.length === 0) return;
+            let maxSpeed = 0;
+            for (const pair of event.pairs) {
+                const v = pair.bodyA.speed ?? Math.hypot(pair.bodyA.velocity.x, pair.bodyA.velocity.y);
+                const w = pair.bodyB.speed ?? Math.hypot(pair.bodyB.velocity.x, pair.bodyB.velocity.y);
+                if (v > maxSpeed) maxSpeed = v;
+                if (w > maxSpeed) maxSpeed = w;
+            }
+            if (maxSpeed > 1.2) window.SoundMgr?.cubeCollide(maxSpeed);
+        };
+        this.matter.world.on('collisionstart', this._cubeCollisionHandler);
+
+        // Start audio (resume context on first interaction, then start music)
+        window.SoundMgr?.startMusic();
+
         // Start playing
         this.gameState.setState('PLAYING');
 
@@ -101,6 +118,7 @@ window.GameScene = class GameScene extends Phaser.Scene {
 
     setupInput() {
         this.input.on('pointerdown', (pointer) => {
+            window.SoundMgr?.resume();
             if (this.gameState.isInputLocked()) return;
 
             const gridPos = this.screenToGrid(pointer.x, pointer.y);
@@ -215,41 +233,45 @@ window.GameScene = class GameScene extends Phaser.Scene {
         }
 
         if (block.state === 'pullable') {
-    block.isResolving = true;
-    this.gameState.setState('ANIMATING');
+            if (this.funnel && this.funnel.isFull()) {
+                this.funnel.flashFull();
+                return;
+            }
 
-    // Lấy snapshot TRƯỚC khi remove block.
-    // Frozen Block vừa được reveal bởi lượt phá này sẽ chưa bị giảm số.
-    const frozenCountdownTargets = this.board.getFrozenCountdownTargets
-        ? this.board.getFrozenCountdownTargets()
-        : [];
+            block.isResolving = true;
+            this.gameState.setState('ANIMATING');
+            window.SoundMgr?.blockTap();
 
-    // Animation chain: shake → lift → blast → cubes spawn
-    await block.shake();
-    await block.liftUp();
+            // Snapshot before removing so only blocks already revealed count down.
+            const frozenCountdownTargets = this.board.getFrozenCountdownTargets
+                ? this.board.getFrozenCountdownTargets(block)
+                : [];
 
-    // Spawn cubes before blast completes for visual overlap
-    this.cubeManager.spawnFromBlock(block);
+            await block.liftUp();
 
-    this.board.removeBlock(block);
-    if (block.keyColor && this.board.activateKey) {
-        this.board.activateKey(block.keyColor, block);
-    }
-    block.blast();
+            // Spawn cubes before blast completes for visual overlap
+            window.SoundMgr?.cubeBurst();
+            this.cubeManager.spawnFromBlock(block);
 
-    // Chỉ giảm số những Frozen Block đã reveal từ trước lượt blast này.
-    if (this.board.decreaseFrozenCounts) {
-        this.board.decreaseFrozenCounts(1, {
-            animate: true,
-            targets: frozenCountdownTargets,
-        });
-    }
+            this.board.removeBlock(block);
+            if (block.keyColor && this.board.activateKey) {
+                this.board.activateKey(block.keyColor, block);
+            }
+            block.blast();
 
-    // Camera micro-shake
-    this.cameras.main.shake(80, 0.005);
+            // Only decrement frozen blocks that were already revealed before this blast.
+            if (this.board.decreaseFrozenCounts) {
+                this.board.decreaseFrozenCounts(1, {
+                    animate: true,
+                    targets: frozenCountdownTargets,
+                });
+            }
 
-    this.resolvePostBoardChange();
-}
+            // Camera micro-shake
+            this.cameras.main.shake(80, 0.005);
+
+            this.resolvePostBoardChange();
+        }
     }
 
     setXRayMode(isOn) {
@@ -344,19 +366,24 @@ window.GameScene = class GameScene extends Phaser.Scene {
     }
 
     async revive() {
-    await this.gameState.revive({
-        conveyor: this.conveyor,
-        funnel: this.funnel,
-        cubeManager: this.cubeManager,
-        carManager: this.carManager,
-        boosterManager: this.boosterManager,
-    });
-}
+        await this.gameState.revive({
+            conveyor: this.conveyor,
+            funnel: this.funnel,
+            cubeManager: this.cubeManager,
+            carManager: this.carManager,
+            boosterManager: this.boosterManager,
+        });
+    }
 
     cleanup() {
         this.scene.stop('UIScene');
         this.events.removeAllListeners('carFull');
 
+        window.SoundMgr?.stopMusic();
+        if (this._cubeCollisionHandler) {
+            this.matter.world.off('collisionstart', this._cubeCollisionHandler);
+            this._cubeCollisionHandler = null;
+        }
         if (this.board) this.board.destroy();
         if (this.funnel) this.funnel.destroy();
         if (this.conveyor) this.conveyor.destroy();

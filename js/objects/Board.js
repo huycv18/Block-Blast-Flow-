@@ -453,29 +453,15 @@ window.Board = class Board {
     return result;
 }
 
-/**
- * Frozen Countdown target rule:
- * A frozen block only counts down when it has been fully revealed.
- *
- * state === 'pullable' means:
- * - Not covered by a block on a higher layer.
- * - Not partially covered.
- * - Would be interactable if it weren't frozen.
- *
- * To also count "visible but blocked" blocks, change the condition to:
- * block.state !== 'covered'
- */
-getFrozenCountdownTargets() {
+getFrozenCountdownTargets(forBlock = null) {
     const result = [];
+    const sameLayer = forBlock != null ? forBlock.layer : -1;
+    if (sameLayer < 0) return result;
 
     for (const [id, block] of this.blocks) {
         if (!block || !block.isFrozen || !block.isFrozen()) continue;
         if (block.isLocked) continue;
-
-        // Frozen blocks on lower layers that are not yet revealed must not count down.
-        if (block.state !== 'pullable') continue;
-
-        result.push(block);
+        if (block.layer === sameLayer && block.state !== 'covered') result.push(block);
     }
 
     return result;
@@ -511,8 +497,7 @@ decreaseFrozenCounts(amount = 1, options = {}) {
 
         if (!block.isFrozen || !block.isFrozen()) continue;
 
-        // Re-check state to avoid decrementing if it changed unexpectedly.
-        if (block.state !== 'pullable') continue;
+        if (block.state === 'covered') continue;
 
         const didUnlock = block.decreaseFrozenCount
             ? block.decreaseFrozenCount(step, { animate: options.animate !== false })

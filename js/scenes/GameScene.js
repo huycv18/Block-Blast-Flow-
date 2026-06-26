@@ -92,6 +92,23 @@ window.GameScene = class GameScene extends Phaser.Scene {
         // Setup input
         this.setupInput();
 
+        // Cube collision SFX — play a tick when a physics cube hits a funnel wall
+        this._cubeCollisionHandler = (event) => {
+            if (!event.pairs || event.pairs.length === 0) return;
+            let maxSpeed = 0;
+            for (const pair of event.pairs) {
+                const v = pair.bodyA.speed ?? Math.hypot(pair.bodyA.velocity.x, pair.bodyA.velocity.y);
+                const w = pair.bodyB.speed ?? Math.hypot(pair.bodyB.velocity.x, pair.bodyB.velocity.y);
+                if (v > maxSpeed) maxSpeed = v;
+                if (w > maxSpeed) maxSpeed = w;
+            }
+            if (maxSpeed > 1.2) window.SoundMgr?.cubeCollide(maxSpeed);
+        };
+        this.matter.world.on('collisionstart', this._cubeCollisionHandler);
+
+        // Start audio (resume context on first interaction, then start music)
+        window.SoundMgr?.startMusic();
+
         // Start playing
         this.gameState.setState('PLAYING');
 
@@ -101,6 +118,7 @@ window.GameScene = class GameScene extends Phaser.Scene {
 
     setupInput() {
         this.input.on('pointerdown', (pointer) => {
+            window.SoundMgr?.resume();
             if (this.gameState.isInputLocked()) return;
 
             const gridPos = this.screenToGrid(pointer.x, pointer.y);
@@ -222,17 +240,17 @@ window.GameScene = class GameScene extends Phaser.Scene {
 
             block.isResolving = true;
             this.gameState.setState('ANIMATING');
+            window.SoundMgr?.blockTap();
 
             // Snapshot before removing so only blocks already revealed count down.
             const frozenCountdownTargets = this.board.getFrozenCountdownTargets
-                ? this.board.getFrozenCountdownTargets()
+                ? this.board.getFrozenCountdownTargets(block)
                 : [];
 
-            // Animation chain: shake → lift → blast → cubes spawn
-            await block.shake();
             await block.liftUp();
 
             // Spawn cubes before blast completes for visual overlap
+            window.SoundMgr?.cubeBurst();
             this.cubeManager.spawnFromBlock(block);
 
             this.board.removeBlock(block);
@@ -361,6 +379,11 @@ window.GameScene = class GameScene extends Phaser.Scene {
         this.scene.stop('UIScene');
         this.events.removeAllListeners('carFull');
 
+        window.SoundMgr?.stopMusic();
+        if (this._cubeCollisionHandler) {
+            this.matter.world.off('collisionstart', this._cubeCollisionHandler);
+            this._cubeCollisionHandler = null;
+        }
         if (this.board) this.board.destroy();
         if (this.funnel) this.funnel.destroy();
         if (this.conveyor) this.conveyor.destroy();

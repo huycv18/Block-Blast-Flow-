@@ -191,51 +191,39 @@ window.Block = class Block {
     }
 
     createLockBadge(scene, C, anchorX, anchorY, sprites) {
-        const bounds = this.getLocalShapeBounds(C, anchorX, anchorY);
-        const radius = Math.max(10, Math.floor(C.CELL_DRAW * 0.30));
-        const x = bounds.maxX - radius * 0.15;
-        const y = bounds.minY + radius * 0.15;
+        const center = this.getLocalShapeCenter(C, anchorX, anchorY);
+        const radius = Math.max(11, Math.floor(C.CELL_DRAW * 0.32));
 
-        this.lockBadgeBg = scene.add.circle(x, y, radius, this.getMetaColor(this.lockColor, 0x888888), 0.96);
-        this.lockBadgeBg.setStrokeStyle(2, 0xFFFFFF, 0.98);
+        this.lockBadgeBg = scene.add.circle(center.x, center.y, radius, this.getMetaColor(this.lockColor, 0x888888), 0.96);
+        this.lockBadgeBg.setStrokeStyle(3, 0xFFFFFF, 0.98);
         this.lockBadgeBg.setAlpha(0);
         sprites.push(this.lockBadgeBg);
 
-        this.lockIcon = scene.add.text(x, y + 1, 'L', {
-            fontFamily: 'Outfit, Arial, sans-serif',
-            fontSize: `${Math.max(12, Math.floor(C.CELL_DRAW * 0.34))}px`,
-            fontStyle: '900',
-            color: '#FFFFFF',
-            stroke: '#000000',
-            strokeThickness: 2,
+        this.lockIcon = scene.add.text(center.x, center.y + 1, '🔒', {
+            fontSize: `${Math.max(13, Math.floor(C.CELL_DRAW * 0.36))}px`,
             align: 'center',
         });
         this.lockIcon.setOrigin(0.5);
+        this.lockIcon.setTintFill(0xFFFFFF);
         this.lockIcon.setAlpha(0);
         sprites.push(this.lockIcon);
     }
 
     createKeyBadge(scene, C, anchorX, anchorY, sprites) {
-        const bounds = this.getLocalShapeBounds(C, anchorX, anchorY);
-        const radius = Math.max(9, Math.floor(C.CELL_DRAW * 0.27));
-        const x = bounds.maxX - radius * 0.15;
-        const y = bounds.maxY - radius * 0.15;
+        const center = this.getLocalShapeCenter(C, anchorX, anchorY);
+        const radius = Math.max(11, Math.floor(C.CELL_DRAW * 0.32));
 
-        this.keyBadgeBg = scene.add.circle(x, y, radius, this.getMetaColor(this.keyColor, 0xF1C40F), 0.96);
-        this.keyBadgeBg.setStrokeStyle(2, 0xF7DC6F, 0.98);
+        this.keyBadgeBg = scene.add.circle(center.x, center.y, radius, this.getMetaColor(this.keyColor, 0xF1C40F), 0.96);
+        this.keyBadgeBg.setStrokeStyle(3, 0xF7DC6F, 0.98);
         this.keyBadgeBg.setAlpha(0);
         sprites.push(this.keyBadgeBg);
 
-        this.keyIcon = scene.add.text(x, y + 1, 'K', {
-            fontFamily: 'Outfit, Arial, sans-serif',
-            fontSize: `${Math.max(11, Math.floor(C.CELL_DRAW * 0.31))}px`,
-            fontStyle: '900',
-            color: '#FFFFFF',
-            stroke: '#000000',
-            strokeThickness: 2,
+        this.keyIcon = scene.add.text(center.x, center.y + 1, '🔑', {
+            fontSize: `${Math.max(12, Math.floor(C.CELL_DRAW * 0.33))}px`,
             align: 'center',
         });
         this.keyIcon.setOrigin(0.5);
+        this.keyIcon.setTintFill(0xFFFFFF);
         this.keyIcon.setAlpha(0);
         sprites.push(this.keyIcon);
     }
@@ -531,7 +519,7 @@ window.Block = class Block {
     getBlockedOverlayAlpha() {
         const layerDim = this.getLayerOverlayAlpha();
 
-        // Giảm số này nếu Block bị blocked vẫn quá tối.
+        // Increase this if blocked blocks appear too dark.
         return Math.max(layerDim, 0.16);
     }
 
