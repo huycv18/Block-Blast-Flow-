@@ -33,7 +33,7 @@ window.CONFIG = {
     CONVEYOR_WIDTH: 340,
     CONVEYOR_HEIGHT: 40,
     CONVEYOR_CORNER_R: 20,
-    CONVEYOR_CAPACITY: 40,
+    CONVEYOR_CAPACITY: 64,
     CONVEYOR_SPEED: 0.2,
     CLEANUP_SPEED_MULT: 2,
     CAR_ABSORB_RADIUS: 55,     // pixel radius around car that pulls cubes off the belt
@@ -63,7 +63,7 @@ window.CONFIG = {
     CUBE_POOL_SIZE: 200,
 
     // --- Funnel ---
-    FUNNEL_CAPACITY: 40,
+    FUNNEL_CAPACITY: 64,
     DRAIN_INTERVAL: 120,
 
     // --- Physics ---
