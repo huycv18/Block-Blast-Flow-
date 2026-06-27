@@ -438,7 +438,34 @@ window.UIScene = class UIScene extends Phaser.Scene {
         this._addBtnPress(retryZone, [retryText]);
         container.add(retryZone);
 
+        // Hold-to-observe hint
+        container.add(this.add.text(cx, pTop + ph + 22, '• Nhấn giữ màn hình để quan sát', {
+            fontFamily: 'Outfit', fontSize: '11px', color: '#4A4A66', resolution: 2,
+        }).setOrigin(0.5));
+
         return { container };
+    }
+
+    _openLoseModal() {
+        this._openModal(this.loseModal.container);
+
+        // Hold (> 350ms) hides the overlay so the player can inspect the board.
+        // Quick taps (< 350ms) still fire button actions normally.
+        let _hideTimer = null;
+        const onDown = () => {
+            if (!this.loseModal?.container?.visible) return;
+            _hideTimer = this.time.delayedCall(350, () => {
+                this.loseModal.container.setAlpha(0);
+            });
+        };
+        const onUp = () => {
+            if (_hideTimer) { _hideTimer.remove(); _hideTimer = null; }
+            if (this.loseModal?.container?.visible) {
+                this.loseModal.container.setAlpha(1);
+            }
+        };
+        this.input.on('pointerdown', onDown);
+        this.input.on('pointerup', onUp);
     }
 
     _showWinModal() {
@@ -734,7 +761,7 @@ window.UIScene = class UIScene extends Phaser.Scene {
                 this.tweens.killTweensOf(this.cleanupText);
                 this._showWinModal();
             } else if (newState === 'LOSE') {
-                this._openModal(this.loseModal.container);
+                this.time.delayedCall(3000, () => this._openLoseModal());
             } else if (newState === 'CLEANUP') {
                 this.cleanupText.setVisible(true);
                 this.tweens.add({
