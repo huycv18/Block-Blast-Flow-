@@ -30,7 +30,7 @@ window.addEventListener('load', () => {
                 debug: false,
             },
         },
-        scene: [BootScene, GameScene, UIScene],
+        scene: [BootScene, LoadingScene, HomeScene, GameScene, UIScene],
     };
 
     window.game = new Phaser.Game(config);

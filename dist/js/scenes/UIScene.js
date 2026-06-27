@@ -98,22 +98,7 @@ window.UIScene = class UIScene extends Phaser.Scene {
         lvlZone.on('pointerdown', () => { window.SoundMgr?.buttonClick(); this.openLevelSelect(); });
         this._addBtnPress(lvlZone, [lvlBtnBg, lvlIcon]);
 
-        // Mute button
-        const muteX = 106;
-        const muteBtnBg = this.add.graphics().setDepth(100);
-        muteBtnBg.fillStyle(THEME.BOOSTER_BG, 1);
-        muteBtnBg.fillRoundedRect(muteX - 15, H / 2 - 13, 30, 26, 7);
-        this.muteBtnIcon = this.add.text(muteX, H / 2, window.SoundMgr?.muted ? '🔇' : '🔊', {
-            fontSize: '14px', resolution: 2,
-        }).setOrigin(0.5).setDepth(101);
-        const muteZone = this.add.zone(muteX, H / 2, 30, 26)
-            .setInteractive({ useHandCursor: true }).setDepth(102);
-        muteZone.on('pointerdown', () => {
-            const muted = window.SoundMgr?.toggleMute();
-            if (this.muteBtnIcon) this.muteBtnIcon.setText(muted ? '🔇' : '🔊');
-            if (!muted) window.SoundMgr?.buttonClick();
-        });
-        this._addBtnPress(muteZone, [muteBtnBg, this.muteBtnIcon]);
+        // (Mute moved to Settings modal)
 
         // Level info (center)
         const levelData = LEVELS[this.gameScene.currentLevel];
@@ -438,7 +423,34 @@ window.UIScene = class UIScene extends Phaser.Scene {
         this._addBtnPress(retryZone, [retryText]);
         container.add(retryZone);
 
+        // Hold-to-observe hint
+        container.add(this.add.text(cx, pTop + ph + 22, '• Nhấn giữ màn hình để quan sát', {
+            fontFamily: 'Outfit', fontSize: '11px', color: '#4A4A66', resolution: 2,
+        }).setOrigin(0.5));
+
         return { container };
+    }
+
+    _openLoseModal() {
+        this._openModal(this.loseModal.container);
+
+        // Hold (> 350ms) hides the overlay so the player can inspect the board.
+        // Quick taps (< 350ms) still fire button actions normally.
+        let _hideTimer = null;
+        const onDown = () => {
+            if (!this.loseModal?.container?.visible) return;
+            _hideTimer = this.time.delayedCall(350, () => {
+                this.loseModal.container.setAlpha(0);
+            });
+        };
+        const onUp = () => {
+            if (_hideTimer) { _hideTimer.remove(); _hideTimer = null; }
+            if (this.loseModal?.container?.visible) {
+                this.loseModal.container.setAlpha(1);
+            }
+        };
+        this.input.on('pointerdown', onDown);
+        this.input.on('pointerup', onUp);
     }
 
     _showWinModal() {
@@ -467,7 +479,7 @@ window.UIScene = class UIScene extends Phaser.Scene {
     createSettingsModal() {
         const cx = CONFIG.GAME_WIDTH / 2;
         const cy = CONFIG.GAME_HEIGHT / 2;
-        const pw = 280, ph = 190;
+        const pw = 292, ph = 316;
         const pLeft = cx - pw / 2, pTop = cy - ph / 2;
 
         const container = this.add.container(0, 0).setDepth(600).setVisible(false);
@@ -481,23 +493,17 @@ window.UIScene = class UIScene extends Phaser.Scene {
 
         // Panel
         const panel = this.add.graphics();
-        panel.fillStyle(0x1E1E2E, 1);
-        panel.fillRoundedRect(pLeft, pTop, pw, ph, 16);
+        panel.fillStyle(0x1A1A2A, 1);
+        panel.fillRoundedRect(pLeft, pTop, pw, ph, 18);
         panel.lineStyle(2, THEME.UI_PANEL_BORDER, 1);
-        panel.strokeRoundedRect(pLeft, pTop, pw, ph, 16);
+        panel.strokeRoundedRect(pLeft, pTop, pw, ph, 18);
         container.add(panel);
 
         // Title
-        container.add(this.add.text(cx, pTop + 30, '⚙️  Tùy chọn', {
+        container.add(this.add.text(cx, pTop + 28, '⚙️  Tùy chọn', {
             fontFamily: 'Outfit', fontSize: '18px', fontStyle: 'bold',
             color: '#FFFFFF', resolution: 2,
         }).setOrigin(0.5));
-
-        // Divider
-        const divider = this.add.graphics();
-        divider.lineStyle(1, THEME.UI_PANEL_BORDER, 0.5);
-        divider.lineBetween(pLeft + 20, pTop + 54, pLeft + pw - 20, pTop + 54);
-        container.add(divider);
 
         // Close button
         const clX = pLeft + pw - 22, clY = pTop + 22;
@@ -517,8 +523,167 @@ window.UIScene = class UIScene extends Phaser.Scene {
         container.add(closeText);
         container.add(closeZone);
 
-        // Restart button
-        const btnY = pTop + 118;
+        // Helper: thin section divider
+        const addDivider = (y) => {
+            const d = this.add.graphics();
+            d.lineStyle(1, THEME.UI_PANEL_BORDER, 0.35);
+            d.lineBetween(pLeft + 16, y, pLeft + pw - 16, y);
+            container.add(d);
+        };
+        addDivider(pTop + 50);
+
+        // ── Sound on/off toggle ──────────────────────────────────────
+        const row1Y = pTop + 80;
+        container.add(this.add.text(pLeft + 20, row1Y, '🔊  Âm thanh', {
+            fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold',
+            color: '#DDDDEE', resolution: 2,
+        }).setOrigin(0, 0.5));
+
+        const TW = 54, TH = 30, TR = 15;
+        const tgX = pLeft + pw - 42;
+        const tgOffX = tgX - TW / 2 + TR, tgOnX = tgX + TW / 2 - TR;
+        let soundOn = !(window.SoundMgr?.muted ?? false);
+
+        const tgBg = this.add.graphics();
+        const redrawToggle = (on) => {
+            tgBg.clear();
+            tgBg.fillStyle(on ? 0x27AE60 : 0x3A3A50, 1);
+            tgBg.fillRoundedRect(tgX - TW / 2, row1Y - TH / 2, TW, TH, TR);
+        };
+        redrawToggle(soundOn);
+        container.add(tgBg);
+
+        const tgKnob = this.add.graphics();
+        tgKnob.fillStyle(0xFFFFFF, 1);
+        tgKnob.fillCircle(0, 0, TR - 4);
+        tgKnob.setPosition(soundOn ? tgOnX : tgOffX, row1Y);
+        container.add(tgKnob);
+
+        const tgLabel = this.add.text(tgX, row1Y, soundOn ? 'BẬT' : 'TẮT', {
+            fontFamily: 'Outfit', fontSize: '9px', fontStyle: 'bold',
+            color: '#FFFFFF', resolution: 2,
+        }).setOrigin(0.5);
+        container.add(tgLabel);
+
+        const tgZone = this.add.zone(tgX, row1Y, TW, TH).setInteractive({ useHandCursor: true });
+        tgZone.on('pointerdown', () => {
+            soundOn = !soundOn;
+            redrawToggle(soundOn);
+            tgLabel.setText(soundOn ? 'BẬT' : 'TẮT');
+            this.tweens.add({ targets: tgKnob, x: soundOn ? tgOnX : tgOffX, duration: 160, ease: 'Quad.easeOut' });
+            const muted = window.SoundMgr?.toggleMute();
+            if (this.muteBtnIcon) this.muteBtnIcon.setText(muted ? '🔇' : '🔊');
+            if (!muted) window.SoundMgr?.buttonClick();
+        });
+        container.add(tgZone);
+
+        addDivider(pTop + 108);
+
+        // ── Slider helper ────────────────────────────────────────────
+        // Each slider: label row + track row.
+        // Pointer coords are in world space; since container lives at (0,0)
+        // after animation, local x = world x.
+        const TRK_MARGIN = 22;
+        const TRK_START  = pLeft + TRK_MARGIN;
+        const TRK_END    = pLeft + pw - TRK_MARGIN;
+        const TRK_W      = TRK_END - TRK_START;
+        const TRK_H      = 6;
+        const KNOB_R     = 12;
+
+        const makeSlider = (labelY, trackY, labelEmoji, labelStr, initV, accentColor, onChange) => {
+            // Label + percentage
+            container.add(this.add.text(pLeft + 20, labelY, `${labelEmoji}  ${labelStr}`, {
+                fontFamily: 'Outfit', fontSize: '13px', color: '#9999BB', resolution: 2,
+            }).setOrigin(0, 0.5));
+
+            const pctTxt = this.add.text(TRK_END + 4, labelY, '', {
+                fontFamily: 'Outfit', fontSize: '12px', fontStyle: 'bold',
+                color: '#7777AA', resolution: 2,
+            }).setOrigin(0, 0.5);
+            container.add(pctTxt);
+
+            // Track background
+            const trackBg = this.add.graphics();
+            trackBg.fillStyle(0x1E1E2E, 1);
+            trackBg.fillRoundedRect(TRK_START, trackY - TRK_H / 2, TRK_W, TRK_H, TRK_H / 2);
+            container.add(trackBg);
+
+            // Track fill (left portion, coloured)
+            const trackFill = this.add.graphics();
+            container.add(trackFill);
+
+            // Knob
+            const knob = this.add.graphics();
+            container.add(knob);
+
+            let value = initV;
+
+            const redraw = (v) => {
+                value = Math.max(0, Math.min(1, v));
+                const kx = TRK_START + value * TRK_W;
+                // Fill
+                trackFill.clear();
+                if (value > 0) {
+                    trackFill.fillStyle(accentColor, 1);
+                    trackFill.fillRoundedRect(TRK_START, trackY - TRK_H / 2, value * TRK_W, TRK_H, TRK_H / 2);
+                }
+                // Knob: glow ring + white circle
+                knob.clear();
+                knob.fillStyle(accentColor, 0.25);
+                knob.fillCircle(kx, trackY, KNOB_R + 5);
+                knob.fillStyle(0xFFFFFF, 1);
+                knob.fillCircle(kx, trackY, KNOB_R);
+                knob.lineStyle(2.5, accentColor, 1);
+                knob.strokeCircle(kx, trackY, KNOB_R);
+                // Label
+                pctTxt.setText(`${Math.round(value * 100)}%`);
+                onChange(value);
+            };
+            redraw(value);
+
+            // Interaction: wide zone covering track + knob
+            const zone = this.add.zone(
+                TRK_START + TRK_W / 2, trackY,
+                TRK_W + KNOB_R * 2, (KNOB_R + 5) * 2 + 4
+            ).setInteractive({ useHandCursor: true });
+            container.add(zone);
+
+            let dragging = false;
+            zone.on('pointerdown', (ptr) => {
+                dragging = true;
+                redraw((ptr.x - TRK_START) / TRK_W);
+            });
+            this.input.on('pointermove', (ptr) => {
+                if (!dragging) return;
+                redraw((ptr.x - TRK_START) / TRK_W);
+            });
+            this.input.on('pointerup', () => {
+                if (dragging) { dragging = false; window.SoundMgr?.buttonClick(); }
+            });
+        };
+
+        // ── Music volume ─────────────────────────────────────────────
+        makeSlider(
+            pTop + 132, pTop + 156,
+            '🎵', 'Nhạc nền',
+            window.SoundMgr?.musicVolume ?? 0.7,
+            0x7B6CF6,
+            (v) => window.SoundMgr?.setMusicVolume(v)
+        );
+
+        // ── SFX volume ───────────────────────────────────────────────
+        makeSlider(
+            pTop + 188, pTop + 212,
+            '🎛', 'Hiệu ứng âm',
+            window.SoundMgr?.sfxVolume ?? 0.5,
+            0x27AE60,
+            (v) => window.SoundMgr?.setSfxVolume(v)
+        );
+
+        addDivider(pTop + 240);
+
+        // ── Restart button ───────────────────────────────────────────
+        const btnY = pTop + 278;
         const restartBg = this.add.graphics();
         restartBg.fillStyle(0xE67E22, 1);
         restartBg.fillRoundedRect(cx - 100, btnY - 22, 200, 44, 12);
@@ -734,7 +899,7 @@ window.UIScene = class UIScene extends Phaser.Scene {
                 this.tweens.killTweensOf(this.cleanupText);
                 this._showWinModal();
             } else if (newState === 'LOSE') {
-                this._openModal(this.loseModal.container);
+                this.time.delayedCall(3000, () => this._openLoseModal());
             } else if (newState === 'CLEANUP') {
                 this.cleanupText.setVisible(true);
                 this.tweens.add({

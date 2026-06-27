@@ -11,7 +11,7 @@ window.BootScene = class BootScene extends Phaser.Scene {
     create() {
         this._generateColorTextures();
         this._generateGeneralTextures();
-        this.scene.start('GameScene');
+        this.scene.start('LoadingScene');
     }
 
     // ----------------------------------------------------------
