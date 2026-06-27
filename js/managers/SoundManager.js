@@ -19,8 +19,10 @@ window.SoundManager = class SoundManager {
         this._lastWarnTime = 0;
         this._lastCollideTime = 0;
 
-        // Load saved mute pref
+        // Load saved preferences
         try { this._muted = localStorage.getItem('bbf_muted') === '1'; } catch {}
+        try { this._sfxVol   = Math.max(0, Math.min(5, parseInt(localStorage.getItem('bbf_sfxvol'))   || 5)); } catch { this._sfxVol   = 5; }
+        try { this._musicVol = Math.max(0, Math.min(5, parseInt(localStorage.getItem('bbf_musicvol')) || 4)); } catch { this._musicVol = 4; }
 
         this._init();
     }
@@ -34,11 +36,11 @@ window.SoundManager = class SoundManager {
             this.masterGain.connect(this.ctx.destination);
             // SFX bus
             this.sfxGain = this.ctx.createGain();
-            this.sfxGain.gain.value = 1.0;
+            this.sfxGain.gain.value = (this._sfxVol ?? 5) / 5;
             this.sfxGain.connect(this.masterGain);
             // Music bus
             this.musicGain = this.ctx.createGain();
-            this.musicGain.gain.value = 0.22;
+            this.musicGain.gain.value = (this._musicVol ?? 4) / 5 * 0.22;
             this.musicGain.connect(this.masterGain);
 
             // Browser autoplay policy: AudioContext starts suspended.
@@ -71,6 +73,26 @@ window.SoundManager = class SoundManager {
     }
 
     get muted() { return this._muted; }
+
+    // Volume: 0-5 integer steps (5 = max)
+    get sfxVolume()   { return this._sfxVol   ?? 5; }
+    get musicVolume() { return this._musicVol ?? 4; }
+
+    setSfxVolume(steps) {
+        this._sfxVol = Math.max(0, Math.min(5, steps));
+        try { localStorage.setItem('bbf_sfxvol', this._sfxVol); } catch {}
+        if (this.sfxGain && this.ctx) {
+            this.sfxGain.gain.setTargetAtTime(this._sfxVol / 5, this.ctx.currentTime, 0.05);
+        }
+    }
+
+    setMusicVolume(steps) {
+        this._musicVol = Math.max(0, Math.min(5, steps));
+        try { localStorage.setItem('bbf_musicvol', this._musicVol); } catch {}
+        if (this.musicGain && this.ctx) {
+            this.musicGain.gain.setTargetAtTime(this._musicVol / 5 * 0.22, this.ctx.currentTime, 0.05);
+        }
+    }
 
     toggleMute() {
         this._muted = !this._muted;
