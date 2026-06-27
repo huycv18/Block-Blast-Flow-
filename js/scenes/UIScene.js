@@ -98,22 +98,7 @@ window.UIScene = class UIScene extends Phaser.Scene {
         lvlZone.on('pointerdown', () => { window.SoundMgr?.buttonClick(); this.openLevelSelect(); });
         this._addBtnPress(lvlZone, [lvlBtnBg, lvlIcon]);
 
-        // Mute button
-        const muteX = 106;
-        const muteBtnBg = this.add.graphics().setDepth(100);
-        muteBtnBg.fillStyle(THEME.BOOSTER_BG, 1);
-        muteBtnBg.fillRoundedRect(muteX - 15, H / 2 - 13, 30, 26, 7);
-        this.muteBtnIcon = this.add.text(muteX, H / 2, window.SoundMgr?.muted ? '🔇' : '🔊', {
-            fontSize: '14px', resolution: 2,
-        }).setOrigin(0.5).setDepth(101);
-        const muteZone = this.add.zone(muteX, H / 2, 30, 26)
-            .setInteractive({ useHandCursor: true }).setDepth(102);
-        muteZone.on('pointerdown', () => {
-            const muted = window.SoundMgr?.toggleMute();
-            if (this.muteBtnIcon) this.muteBtnIcon.setText(muted ? '🔇' : '🔊');
-            if (!muted) window.SoundMgr?.buttonClick();
-        });
-        this._addBtnPress(muteZone, [muteBtnBg, this.muteBtnIcon]);
+        // (Mute moved to Settings modal)
 
         // Level info (center)
         const levelData = LEVELS[this.gameScene.currentLevel];
@@ -494,7 +479,7 @@ window.UIScene = class UIScene extends Phaser.Scene {
     createSettingsModal() {
         const cx = CONFIG.GAME_WIDTH / 2;
         const cy = CONFIG.GAME_HEIGHT / 2;
-        const pw = 292, ph = 296;
+        const pw = 292, ph = 316;
         const pLeft = cx - pw / 2, pTop = cy - ph / 2;
 
         const container = this.add.container(0, 0).setDepth(600).setVisible(false);
@@ -594,93 +579,111 @@ window.UIScene = class UIScene extends Phaser.Scene {
 
         addDivider(pTop + 108);
 
-        // ── Volume row helper ────────────────────────────────────────
-        const STEPS = 5;
-        const BAR_W = 88, SEG_H = 14, SEG_GAP = 3;
-        const segW = (BAR_W - (STEPS - 1) * SEG_GAP) / STEPS;
-        // Controls area: minus at cx-62, bar centred, plus at cx+62
-        const minusX = cx - 62, plusX = cx + 62;
-        const barStartX = minusX + 22;
+        // ── Slider helper ────────────────────────────────────────────
+        // Each slider: label row + track row.
+        // Pointer coords are in world space; since container lives at (0,0)
+        // after animation, local x = world x.
+        const TRK_MARGIN = 22;
+        const TRK_START  = pLeft + TRK_MARGIN;
+        const TRK_END    = pLeft + pw - TRK_MARGIN;
+        const TRK_W      = TRK_END - TRK_START;
+        const TRK_H      = 6;
+        const KNOB_R     = 12;
 
-        const drawVolBar = (gfx, y, filled, color) => {
-            gfx.clear();
-            for (let i = 0; i < STEPS; i++) {
-                const sx = barStartX + i * (segW + SEG_GAP);
-                gfx.fillStyle(i < filled ? color : 0x252535, 1);
-                gfx.fillRoundedRect(sx, y - SEG_H / 2, segW, SEG_H, 3);
-            }
-        };
+        const makeSlider = (labelY, trackY, labelEmoji, labelStr, initV, accentColor, onChange) => {
+            // Label + percentage
+            container.add(this.add.text(pLeft + 20, labelY, `${labelEmoji}  ${labelStr}`, {
+                fontFamily: 'Outfit', fontSize: '13px', color: '#9999BB', resolution: 2,
+            }).setOrigin(0, 0.5));
 
-        const addVolBtn = (x, y, label, onClick) => {
-            const bg = this.add.graphics();
-            bg.fillStyle(0x252535, 1);
-            bg.fillCircle(x, y, 14);
-            bg.lineStyle(1.5, 0x444455, 1);
-            bg.strokeCircle(x, y, 14);
-            const txt = this.add.text(x, y - 1, label, {
-                fontFamily: 'Outfit', fontSize: '20px', fontStyle: 'bold',
-                color: '#AAAACC', resolution: 2,
-            }).setOrigin(0.5);
-            const zone = this.add.zone(x, y, 32, 32).setInteractive({ useHandCursor: true });
-            zone.on('pointerdown', onClick);
-            this._addBtnPress(zone, [bg, txt]);
-            container.add(bg);
-            container.add(txt);
+            const pctTxt = this.add.text(TRK_END + 4, labelY, '', {
+                fontFamily: 'Outfit', fontSize: '12px', fontStyle: 'bold',
+                color: '#7777AA', resolution: 2,
+            }).setOrigin(0, 0.5);
+            container.add(pctTxt);
+
+            // Track background
+            const trackBg = this.add.graphics();
+            trackBg.fillStyle(0x1E1E2E, 1);
+            trackBg.fillRoundedRect(TRK_START, trackY - TRK_H / 2, TRK_W, TRK_H, TRK_H / 2);
+            container.add(trackBg);
+
+            // Track fill (left portion, coloured)
+            const trackFill = this.add.graphics();
+            container.add(trackFill);
+
+            // Knob
+            const knob = this.add.graphics();
+            container.add(knob);
+
+            let value = initV;
+
+            const redraw = (v) => {
+                value = Math.max(0, Math.min(1, v));
+                const kx = TRK_START + value * TRK_W;
+                // Fill
+                trackFill.clear();
+                if (value > 0) {
+                    trackFill.fillStyle(accentColor, 1);
+                    trackFill.fillRoundedRect(TRK_START, trackY - TRK_H / 2, value * TRK_W, TRK_H, TRK_H / 2);
+                }
+                // Knob: glow ring + white circle
+                knob.clear();
+                knob.fillStyle(accentColor, 0.25);
+                knob.fillCircle(kx, trackY, KNOB_R + 5);
+                knob.fillStyle(0xFFFFFF, 1);
+                knob.fillCircle(kx, trackY, KNOB_R);
+                knob.lineStyle(2.5, accentColor, 1);
+                knob.strokeCircle(kx, trackY, KNOB_R);
+                // Label
+                pctTxt.setText(`${Math.round(value * 100)}%`);
+                onChange(value);
+            };
+            redraw(value);
+
+            // Interaction: wide zone covering track + knob
+            const zone = this.add.zone(
+                TRK_START + TRK_W / 2, trackY,
+                TRK_W + KNOB_R * 2, (KNOB_R + 5) * 2 + 4
+            ).setInteractive({ useHandCursor: true });
             container.add(zone);
+
+            let dragging = false;
+            zone.on('pointerdown', (ptr) => {
+                dragging = true;
+                redraw((ptr.x - TRK_START) / TRK_W);
+            });
+            this.input.on('pointermove', (ptr) => {
+                if (!dragging) return;
+                redraw((ptr.x - TRK_START) / TRK_W);
+            });
+            this.input.on('pointerup', () => {
+                if (dragging) { dragging = false; window.SoundMgr?.buttonClick(); }
+            });
         };
 
         // ── Music volume ─────────────────────────────────────────────
-        const row2Y = pTop + 138;
-        container.add(this.add.text(pLeft + 20, row2Y, '🎵  Nhạc nền', {
-            fontFamily: 'Outfit', fontSize: '13px', color: '#9999BB', resolution: 2,
-        }).setOrigin(0, 0.5));
-
-        let musicVol = window.SoundMgr?.musicVolume ?? 4;
-        const musicBarGfx = this.add.graphics();
-        drawVolBar(musicBarGfx, row2Y, musicVol, 0x7B6CF6);
-        container.add(musicBarGfx);
-
-        addVolBtn(minusX, row2Y, '−', () => {
-            musicVol = Math.max(0, musicVol - 1);
-            window.SoundMgr?.setMusicVolume(musicVol);
-            drawVolBar(musicBarGfx, row2Y, musicVol, 0x7B6CF6);
-            if (musicVol > 0) window.SoundMgr?.buttonClick();
-        });
-        addVolBtn(plusX, row2Y, '+', () => {
-            musicVol = Math.min(STEPS, musicVol + 1);
-            window.SoundMgr?.setMusicVolume(musicVol);
-            drawVolBar(musicBarGfx, row2Y, musicVol, 0x7B6CF6);
-            window.SoundMgr?.buttonClick();
-        });
+        makeSlider(
+            pTop + 132, pTop + 156,
+            '🎵', 'Nhạc nền',
+            window.SoundMgr?.musicVolume ?? 0.5,
+            0x7B6CF6,
+            (v) => window.SoundMgr?.setMusicVolume(v)
+        );
 
         // ── SFX volume ───────────────────────────────────────────────
-        const row3Y = pTop + 186;
-        container.add(this.add.text(pLeft + 20, row3Y, '🎛  Hiệu ứng âm', {
-            fontFamily: 'Outfit', fontSize: '13px', color: '#9999BB', resolution: 2,
-        }).setOrigin(0, 0.5));
+        makeSlider(
+            pTop + 188, pTop + 212,
+            '🎛', 'Hiệu ứng âm',
+            window.SoundMgr?.sfxVolume ?? 0.5,
+            0x27AE60,
+            (v) => window.SoundMgr?.setSfxVolume(v)
+        );
 
-        let sfxVol = window.SoundMgr?.sfxVolume ?? 5;
-        const sfxBarGfx = this.add.graphics();
-        drawVolBar(sfxBarGfx, row3Y, sfxVol, 0x27AE60);
-        container.add(sfxBarGfx);
-
-        addVolBtn(minusX, row3Y, '−', () => {
-            sfxVol = Math.max(0, sfxVol - 1);
-            window.SoundMgr?.setSfxVolume(sfxVol);
-            drawVolBar(sfxBarGfx, row3Y, sfxVol, 0x27AE60);
-            if (sfxVol > 0) window.SoundMgr?.buttonClick();
-        });
-        addVolBtn(plusX, row3Y, '+', () => {
-            sfxVol = Math.min(STEPS, sfxVol + 1);
-            window.SoundMgr?.setSfxVolume(sfxVol);
-            drawVolBar(sfxBarGfx, row3Y, sfxVol, 0x27AE60);
-            window.SoundMgr?.buttonClick();
-        });
-
-        addDivider(pTop + 216);
+        addDivider(pTop + 240);
 
         // ── Restart button ───────────────────────────────────────────
-        const btnY = pTop + 256;
+        const btnY = pTop + 278;
         const restartBg = this.add.graphics();
         restartBg.fillStyle(0xE67E22, 1);
         restartBg.fillRoundedRect(cx - 100, btnY - 22, 200, 44, 12);

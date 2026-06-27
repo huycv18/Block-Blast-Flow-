@@ -19,10 +19,10 @@ window.SoundManager = class SoundManager {
         this._lastWarnTime = 0;
         this._lastCollideTime = 0;
 
-        // Load saved preferences
+        // Load saved preferences (volumes: 0.0–1.0 float; 0.5 = old default = 50% of max range)
         try { this._muted = localStorage.getItem('bbf_muted') === '1'; } catch {}
-        try { this._sfxVol   = Math.max(0, Math.min(5, parseInt(localStorage.getItem('bbf_sfxvol'))   || 5)); } catch { this._sfxVol   = 5; }
-        try { this._musicVol = Math.max(0, Math.min(5, parseInt(localStorage.getItem('bbf_musicvol')) || 4)); } catch { this._musicVol = 4; }
+        try { const sv = parseFloat(localStorage.getItem('bbf_sfxvol3'));   this._sfxVol   = isNaN(sv) ? 0.5 : Math.max(0, Math.min(1, sv)); } catch { this._sfxVol   = 0.5; }
+        try { const mv = parseFloat(localStorage.getItem('bbf_musicvol3')); this._musicVol = isNaN(mv) ? 0.5 : Math.max(0, Math.min(1, mv)); } catch { this._musicVol = 0.5; }
 
         this._init();
     }
@@ -36,11 +36,11 @@ window.SoundManager = class SoundManager {
             this.masterGain.connect(this.ctx.destination);
             // SFX bus
             this.sfxGain = this.ctx.createGain();
-            this.sfxGain.gain.value = (this._sfxVol ?? 5) / 5;
+            this.sfxGain.gain.value = (this._sfxVol ?? 0.5) * 2.0;   // 0→0  0.5→1.0(old default)  1→2.0
             this.sfxGain.connect(this.masterGain);
             // Music bus
             this.musicGain = this.ctx.createGain();
-            this.musicGain.gain.value = (this._musicVol ?? 4) / 5 * 0.22;
+            this.musicGain.gain.value = (this._musicVol ?? 0.5) * 0.44; // 0→0  0.5→0.22(old default)  1→0.44
             this.musicGain.connect(this.masterGain);
 
             // Browser autoplay policy: AudioContext starts suspended.
@@ -74,23 +74,23 @@ window.SoundManager = class SoundManager {
 
     get muted() { return this._muted; }
 
-    // Volume: 0-5 integer steps (5 = max)
-    get sfxVolume()   { return this._sfxVol   ?? 5; }
-    get musicVolume() { return this._musicVol ?? 4; }
+    // Volume: 0.0–1.0 float.  0.5 = "old full volume".  1.0 = 2× louder.
+    get sfxVolume()   { return this._sfxVol   ?? 0.5; }
+    get musicVolume() { return this._musicVol ?? 0.5; }
 
-    setSfxVolume(steps) {
-        this._sfxVol = Math.max(0, Math.min(5, steps));
-        try { localStorage.setItem('bbf_sfxvol', this._sfxVol); } catch {}
+    setSfxVolume(v) {   // v: 0.0 – 1.0
+        this._sfxVol = Math.max(0, Math.min(1, v));
+        try { localStorage.setItem('bbf_sfxvol3', this._sfxVol); } catch {}
         if (this.sfxGain && this.ctx) {
-            this.sfxGain.gain.setTargetAtTime(this._sfxVol / 5, this.ctx.currentTime, 0.05);
+            this.sfxGain.gain.setTargetAtTime(this._sfxVol * 2.0, this.ctx.currentTime, 0.04);
         }
     }
 
-    setMusicVolume(steps) {
-        this._musicVol = Math.max(0, Math.min(5, steps));
-        try { localStorage.setItem('bbf_musicvol', this._musicVol); } catch {}
+    setMusicVolume(v) { // v: 0.0 – 1.0
+        this._musicVol = Math.max(0, Math.min(1, v));
+        try { localStorage.setItem('bbf_musicvol3', this._musicVol); } catch {}
         if (this.musicGain && this.ctx) {
-            this.musicGain.gain.setTargetAtTime(this._musicVol / 5 * 0.22, this.ctx.currentTime, 0.05);
+            this.musicGain.gain.setTargetAtTime(this._musicVol * 0.44, this.ctx.currentTime, 0.04);
         }
     }
 
