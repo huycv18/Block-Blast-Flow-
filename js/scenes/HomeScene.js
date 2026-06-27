@@ -9,6 +9,7 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         const W = CONFIG.GAME_WIDTH, H = CONFIG.GAME_HEIGHT, cx = W / 2;
 
         this.cameras.main.fadeIn(400, 0, 0, 0);
+        window.SoundMgr?.startMusic();
 
         // ── Background ───────────────────────────────────────────
         const bg = this.add.graphics();
@@ -156,6 +157,10 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
             fontFamily: 'Outfit', fontSize: '12px', color: '#333355', resolution: 2,
         }).setOrigin(0.5).setAlpha(0);
         this.tweens.add({ targets: this.children.list[this.children.list.length - 1], alpha: 0.7, duration: 500, delay: 700 });
+    }
+
+    shutdown() {
+        window.SoundMgr?.stopMusic();
     }
 
     _spawnDecoBlocks(W, H) {
