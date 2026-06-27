@@ -311,12 +311,14 @@ window.GameScene = class GameScene extends Phaser.Scene {
     update(time, delta) {
         const state = this.gameState.getState();
 
-        if (state === 'WIN' || state === 'LOSE' || state === 'IDLE') return;
+        if (state === 'WIN' || state === 'IDLE') return;
 
-        // Update systems
+        // Update systems (conveyor keeps running even on LOSE so player can watch)
         if (this.cubeManager) this.cubeManager.update();
         if (this.funnel) this.funnel.update(this.conveyor);
         if (this.conveyor) this.conveyor.update(delta, this.carManager);
+
+        if (state === 'LOSE') return;
 
         // GDD: WIN = Board empty + Cars clear.
         // When the board is empty, input stays locked in CLEANUP while remaining cubes fill cars.
