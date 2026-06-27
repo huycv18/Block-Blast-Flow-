@@ -108,8 +108,9 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         }).setOrigin(0.5).setAlpha(0);
         this.tweens.add({ targets: footer, alpha: 0.7, duration: 500, delay: 700 });
 
-        // Profile modal — built LAST so it renders on top of everything
+        // Modals — built LAST so they render on top of everything
         this._buildProfileModal(W, H, cx);
+        this._buildHomeSettingsModal(W, H, cx);
     }
 
     // ──────────────────────────────────────────────────────────
@@ -125,7 +126,7 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
 
     // ──────────────────────────────────────────────────────────
     _buildHeader(W, cx) {
-        const pillY = 24, pillW = 80, pillH = 32, pillR = 16;
+        const pillY = 32, pillW = 80, pillH = 28, pillR = 14;
 
         // ── Profile avatar button (top-left) ─────────────────
         const r = 22, bx = 40, by = 44;
@@ -138,6 +139,22 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         this.add.zone(bx, by, 52, 52).setInteractive({ useHandCursor: true }).setDepth(12)
             .on('pointerdown', () => { window.SoundMgr?.buttonClick(); this._openProfileModal(); });
         this.tweens.add({ targets: [this._profGfx, this._profEmoji], alpha: 1, duration: 400, delay: 200 });
+
+        // ── Settings button (top-right) ───────────────────────
+        const settingsGfx = this.add.graphics().setDepth(10).setAlpha(0);
+        settingsGfx.lineStyle(2.5, 0x9999BB, 1);
+        settingsGfx.strokeCircle(W - 22, 22, 13);
+        for (let i = 0; i < 6; i++) {
+            const a = (i * Math.PI) / 3;
+            settingsGfx.lineBetween(
+                W - 22 + Math.cos(a) * 7, 22 + Math.sin(a) * 7,
+                W - 22 + Math.cos(a) * 11, 22 + Math.sin(a) * 11
+            );
+        }
+        settingsGfx.fillStyle(0x9999BB, 1); settingsGfx.fillCircle(W - 22, 22, 3.5);
+        this.add.zone(W - 22, 22, 34, 34).setInteractive({ useHandCursor: true }).setDepth(12)
+            .on('pointerdown', () => { window.SoundMgr?.buttonClick(); this._openHomeSettings(); });
+        this.tweens.add({ targets: settingsGfx, alpha: 1, duration: 400, delay: 200 });
 
         // ── Heart pill ────────────────────────────────────────
         const hpX = W - pillW * 2 - 12;
@@ -357,6 +374,148 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
             });
         };
         this._refreshModal();
+    }
+
+    // ──────────────────────────────────────────────────────────
+    _buildHomeSettingsModal(W, H, cx) {
+        const pw = 292, ph = 310;
+        const pLeft = cx - pw / 2, pTop = H / 2 - ph / 2;
+
+        const c = this.add.container(0, 0).setDepth(60).setVisible(false);
+        this._settingsContainer = c;
+
+        // Dim
+        const dim = this.add.graphics();
+        dim.fillStyle(0x000000, 0.68); dim.fillRect(0, 0, W, H);
+        dim.setInteractive(new Phaser.Geom.Rectangle(0, 0, W, H), Phaser.Geom.Rectangle.Contains);
+        dim.on('pointerdown', () => this._closeHomeSettings());
+        c.add(dim);
+
+        // Panel blocker
+        const blocker = this.add.zone(cx, pTop + ph / 2, pw, ph).setInteractive(); c.add(blocker);
+
+        // Panel bg
+        const panel = this.add.graphics();
+        panel.fillStyle(0x1A1A2A, 1); panel.fillRoundedRect(pLeft, pTop, pw, ph, 18);
+        panel.fillStyle(0x3A2A6A, 1); panel.fillRoundedRect(pLeft, pTop, pw, 50, { tl:18, tr:18, bl:0, br:0 });
+        panel.lineStyle(1.5, 0x4A3CC8, 0.5); panel.strokeRoundedRect(pLeft, pTop, pw, ph, 18);
+        c.add(panel);
+
+        // Title
+        c.add(this.add.text(cx, pTop + 25, '⚙  Cài đặt', {
+            fontFamily: 'Outfit', fontSize: '17px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
+        }).setOrigin(0.5));
+
+        // Close ✕
+        const clX = pLeft + pw - 26, clY = pTop + 25;
+        c.add(this.add.text(clX, clY, '✕', { fontFamily: 'Outfit', fontSize: '18px', color: '#CCCCEE', resolution: 2 }).setOrigin(0.5));
+        const clZ = this.add.zone(clX, clY, 40, 40).setInteractive({ useHandCursor: true }); c.add(clZ);
+        clZ.on('pointerdown', () => this._closeHomeSettings());
+
+        // Divider helper
+        const divider = (y) => {
+            const d = this.add.graphics();
+            d.lineStyle(1, 0x3A3A60, 0.5); d.lineBetween(pLeft + 16, y, pLeft + pw - 16, y); c.add(d);
+        };
+        divider(pTop + 50);
+
+        // Sound toggle
+        const row1Y = pTop + 78;
+        c.add(this.add.text(pLeft + 18, row1Y, '🔊  Âm thanh', {
+            fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold', color: '#DDDDEE', resolution: 2,
+        }).setOrigin(0, 0.5));
+
+        const TW = 54, TH = 28, TR = 14;
+        const tgX = pLeft + pw - 40;
+        const tgOffX = tgX - TW / 2 + TR, tgOnX = tgX + TW / 2 - TR;
+        let soundOn = !(window.SoundMgr?.muted ?? false);
+
+        const tgBg = this.add.graphics();
+        const redrawToggle = (on) => {
+            tgBg.clear(); tgBg.fillStyle(on ? 0x27AE60 : 0x3A3A50, 1);
+            tgBg.fillRoundedRect(tgX - TW / 2, row1Y - TH / 2, TW, TH, TR);
+        };
+        redrawToggle(soundOn); c.add(tgBg);
+
+        const tgKnob = this.add.graphics();
+        tgKnob.fillStyle(0xFFFFFF, 1); tgKnob.fillCircle(0, 0, TR - 3);
+        tgKnob.setPosition(soundOn ? tgOnX : tgOffX, row1Y); c.add(tgKnob);
+
+        const tgLabel = this.add.text(tgX, row1Y, soundOn ? 'BẬT' : 'TẮT', {
+            fontFamily: 'Outfit', fontSize: '9px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
+        }).setOrigin(0.5); c.add(tgLabel);
+
+        const tgZone = this.add.zone(tgX, row1Y, TW, TH).setInteractive({ useHandCursor: true }); c.add(tgZone);
+        tgZone.on('pointerdown', () => {
+            soundOn = !soundOn;
+            redrawToggle(soundOn); tgLabel.setText(soundOn ? 'BẬT' : 'TẮT');
+            this.tweens.add({ targets: tgKnob, x: soundOn ? tgOnX : tgOffX, duration: 160, ease: 'Quad.easeOut' });
+            const muted = window.SoundMgr?.toggleMute();
+            if (!muted) window.SoundMgr?.buttonClick();
+        });
+
+        divider(pTop + 106);
+
+        // Slider helper
+        const TRK_M = 20, TRK_S = pLeft + TRK_M, TRK_E = pLeft + pw - TRK_M;
+        const TRK_W = TRK_E - TRK_S, TRK_H = 6, KR = 12;
+
+        const makeSlider = (labelY, trackY, emoji, label, initV, accent, onChange) => {
+            c.add(this.add.text(pLeft + 18, labelY, `${emoji}  ${label}`, {
+                fontFamily: 'Outfit', fontSize: '13px', color: '#9999BB', resolution: 2,
+            }).setOrigin(0, 0.5));
+            const pctTxt = this.add.text(TRK_E + 4, labelY, '', {
+                fontFamily: 'Outfit', fontSize: '11px', fontStyle: 'bold', color: '#7777AA', resolution: 2,
+            }).setOrigin(0, 0.5); c.add(pctTxt);
+
+            const trkBg = this.add.graphics();
+            trkBg.fillStyle(0x1E1E2E, 1); trkBg.fillRoundedRect(TRK_S, trackY - TRK_H/2, TRK_W, TRK_H, TRK_H/2); c.add(trkBg);
+            const trkFill = this.add.graphics(); c.add(trkFill);
+            const knob = this.add.graphics(); c.add(knob);
+
+            let value = initV;
+            const redraw = (v) => {
+                value = Math.max(0, Math.min(1, v));
+                const kx = TRK_S + value * TRK_W;
+                trkFill.clear();
+                if (value > 0) { trkFill.fillStyle(accent, 1); trkFill.fillRoundedRect(TRK_S, trackY - TRK_H/2, value * TRK_W, TRK_H, TRK_H/2); }
+                knob.clear();
+                knob.fillStyle(accent, 0.22); knob.fillCircle(kx, trackY, KR + 5);
+                knob.fillStyle(0xFFFFFF, 1); knob.fillCircle(kx, trackY, KR);
+                knob.lineStyle(2.5, accent, 1); knob.strokeCircle(kx, trackY, KR);
+                pctTxt.setText(`${Math.round(value * 100)}%`);
+                onChange(value);
+            };
+            redraw(value);
+
+            const zone = this.add.zone(TRK_S + TRK_W/2, trackY, TRK_W + KR*2, (KR+5)*2+4).setInteractive({ useHandCursor: true }); c.add(zone);
+            let dragging = false;
+            zone.on('pointerdown', (ptr) => { dragging = true; redraw((ptr.x - TRK_S) / TRK_W); });
+            this.input.on('pointermove', (ptr) => { if (dragging) redraw((ptr.x - TRK_S) / TRK_W); });
+            this.input.on('pointerup', () => { if (dragging) { dragging = false; window.SoundMgr?.buttonClick(); } });
+        };
+
+        makeSlider(pTop + 128, pTop + 150, '🎵', 'Nhạc nền',
+            window.SoundMgr?.musicVolume ?? 0.7, 0x7B6CF6,
+            (v) => window.SoundMgr?.setMusicVolume(v));
+
+        makeSlider(pTop + 190, pTop + 212, '🎛', 'Hiệu ứng âm',
+            window.SoundMgr?.sfxVolume ?? 0.5, 0x27AE60,
+            (v) => window.SoundMgr?.setSfxVolume(v));
+    }
+
+    _openHomeSettings() {
+        const c = this._settingsContainer;
+        c.setVisible(true).setAlpha(0).setY(20);
+        this.tweens.add({ targets: c, alpha: 1, y: 0, duration: 280, ease: 'Back.easeOut' });
+    }
+
+    _closeHomeSettings() {
+        const c = this._settingsContainer;
+        this.tweens.add({
+            targets: c, alpha: 0, y: 16, duration: 180, ease: 'Quad.easeIn',
+            onComplete: () => c.setVisible(false).setY(0),
+        });
     }
 
     _openProfileModal() {

@@ -36,11 +36,11 @@ window.SoundManager = class SoundManager {
             this.masterGain.connect(this.ctx.destination);
             // SFX bus
             this.sfxGain = this.ctx.createGain();
-            this.sfxGain.gain.value = (this._sfxVol ?? 0.5) * 2.0;   // 0→0  0.5→1.0(old default)  1→2.0
+            this.sfxGain.gain.value = (this._sfxVol ?? 0.5) * 4.0;   // 0→0  0.5→2.0  1→4.0
             this.sfxGain.connect(this.masterGain);
             // Music bus
             this.musicGain = this.ctx.createGain();
-            this.musicGain.gain.value = (this._musicVol ?? 0.7) * 0.66; // 0→0  0.5→0.33  1→0.66
+            this.musicGain.gain.value = (this._musicVol ?? 0.7) * 1.32; // 0→0  0.5→0.66  1→1.32
             this.musicGain.connect(this.masterGain);
 
             // Browser autoplay policy: AudioContext starts suspended.
@@ -82,7 +82,7 @@ window.SoundManager = class SoundManager {
         this._sfxVol = Math.max(0, Math.min(1, v));
         try { localStorage.setItem('bbf_sfxvol3', this._sfxVol); } catch {}
         if (this.sfxGain && this.ctx) {
-            this.sfxGain.gain.setTargetAtTime(this._sfxVol * 2.0, this.ctx.currentTime, 0.04);
+            this.sfxGain.gain.setTargetAtTime(this._sfxVol * 4.0, this.ctx.currentTime, 0.04);
         }
     }
 
@@ -90,7 +90,7 @@ window.SoundManager = class SoundManager {
         this._musicVol = Math.max(0, Math.min(1, v));
         try { localStorage.setItem('bbf_musicvol3', this._musicVol); } catch {}
         if (this.musicGain && this.ctx) {
-            this.musicGain.gain.setTargetAtTime(this._musicVol * 0.66, this.ctx.currentTime, 0.04);
+            this.musicGain.gain.setTargetAtTime(this._musicVol * 1.32, this.ctx.currentTime, 0.04);
         }
     }
 
@@ -301,7 +301,7 @@ window.SoundManager = class SoundManager {
             return;
         }
         this.musicGain.gain.setValueAtTime(0, this.ctx.currentTime);
-        this.musicGain.gain.linearRampToValueAtTime(0.33, this.ctx.currentTime + 2.0);
+        this.musicGain.gain.linearRampToValueAtTime(0.66, this.ctx.currentTime + 2.0);
         this._musicPlaying = true;
         this._musicStep    = 0;
         this._nextNoteTime = this.ctx.currentTime + 0.1;
@@ -314,7 +314,7 @@ window.SoundManager = class SoundManager {
         if (this.musicGain && this.ctx) {
             this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, fadeDur / 4);
             setTimeout(() => {
-                if (this.musicGain) this.musicGain.gain.value = 0.33;
+                if (this.musicGain) this.musicGain.gain.value = 0.66;
             }, fadeDur * 1000 + 200);
         }
     }
