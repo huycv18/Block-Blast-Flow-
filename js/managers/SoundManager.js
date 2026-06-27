@@ -40,7 +40,7 @@ window.SoundManager = class SoundManager {
             this.sfxGain.connect(this.masterGain);
             // Music bus
             this.musicGain = this.ctx.createGain();
-            this.musicGain.gain.value = (this._musicVol ?? 0.7) * 0.44; // 0→0  0.5→0.22(old default)  1→0.44
+            this.musicGain.gain.value = (this._musicVol ?? 0.7) * 0.66; // 0→0  0.5→0.33  1→0.66
             this.musicGain.connect(this.masterGain);
 
             // Browser autoplay policy: AudioContext starts suspended.
@@ -90,7 +90,7 @@ window.SoundManager = class SoundManager {
         this._musicVol = Math.max(0, Math.min(1, v));
         try { localStorage.setItem('bbf_musicvol3', this._musicVol); } catch {}
         if (this.musicGain && this.ctx) {
-            this.musicGain.gain.setTargetAtTime(this._musicVol * 0.44, this.ctx.currentTime, 0.04);
+            this.musicGain.gain.setTargetAtTime(this._musicVol * 0.66, this.ctx.currentTime, 0.04);
         }
     }
 
@@ -301,7 +301,7 @@ window.SoundManager = class SoundManager {
             return;
         }
         this.musicGain.gain.setValueAtTime(0, this.ctx.currentTime);
-        this.musicGain.gain.linearRampToValueAtTime(0.22, this.ctx.currentTime + 2.0);
+        this.musicGain.gain.linearRampToValueAtTime(0.33, this.ctx.currentTime + 2.0);
         this._musicPlaying = true;
         this._musicStep    = 0;
         this._nextNoteTime = this.ctx.currentTime + 0.1;
@@ -314,7 +314,7 @@ window.SoundManager = class SoundManager {
         if (this.musicGain && this.ctx) {
             this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, fadeDur / 4);
             setTimeout(() => {
-                if (this.musicGain) this.musicGain.gain.value = 0.22;
+                if (this.musicGain) this.musicGain.gain.value = 0.33;
             }, fadeDur * 1000 + 200);
         }
     }
