@@ -494,7 +494,7 @@ window.UIScene = class UIScene extends Phaser.Scene {
     createSettingsModal() {
         const cx = CONFIG.GAME_WIDTH / 2;
         const cy = CONFIG.GAME_HEIGHT / 2;
-        const pw = 280, ph = 190;
+        const pw = 292, ph = 296;
         const pLeft = cx - pw / 2, pTop = cy - ph / 2;
 
         const container = this.add.container(0, 0).setDepth(600).setVisible(false);
@@ -508,23 +508,17 @@ window.UIScene = class UIScene extends Phaser.Scene {
 
         // Panel
         const panel = this.add.graphics();
-        panel.fillStyle(0x1E1E2E, 1);
-        panel.fillRoundedRect(pLeft, pTop, pw, ph, 16);
+        panel.fillStyle(0x1A1A2A, 1);
+        panel.fillRoundedRect(pLeft, pTop, pw, ph, 18);
         panel.lineStyle(2, THEME.UI_PANEL_BORDER, 1);
-        panel.strokeRoundedRect(pLeft, pTop, pw, ph, 16);
+        panel.strokeRoundedRect(pLeft, pTop, pw, ph, 18);
         container.add(panel);
 
         // Title
-        container.add(this.add.text(cx, pTop + 30, '⚙️  Tùy chọn', {
+        container.add(this.add.text(cx, pTop + 28, '⚙️  Tùy chọn', {
             fontFamily: 'Outfit', fontSize: '18px', fontStyle: 'bold',
             color: '#FFFFFF', resolution: 2,
         }).setOrigin(0.5));
-
-        // Divider
-        const divider = this.add.graphics();
-        divider.lineStyle(1, THEME.UI_PANEL_BORDER, 0.5);
-        divider.lineBetween(pLeft + 20, pTop + 54, pLeft + pw - 20, pTop + 54);
-        container.add(divider);
 
         // Close button
         const clX = pLeft + pw - 22, clY = pTop + 22;
@@ -544,8 +538,149 @@ window.UIScene = class UIScene extends Phaser.Scene {
         container.add(closeText);
         container.add(closeZone);
 
-        // Restart button
-        const btnY = pTop + 118;
+        // Helper: thin section divider
+        const addDivider = (y) => {
+            const d = this.add.graphics();
+            d.lineStyle(1, THEME.UI_PANEL_BORDER, 0.35);
+            d.lineBetween(pLeft + 16, y, pLeft + pw - 16, y);
+            container.add(d);
+        };
+        addDivider(pTop + 50);
+
+        // ── Sound on/off toggle ──────────────────────────────────────
+        const row1Y = pTop + 80;
+        container.add(this.add.text(pLeft + 20, row1Y, '🔊  Âm thanh', {
+            fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold',
+            color: '#DDDDEE', resolution: 2,
+        }).setOrigin(0, 0.5));
+
+        const TW = 54, TH = 30, TR = 15;
+        const tgX = pLeft + pw - 42;
+        const tgOffX = tgX - TW / 2 + TR, tgOnX = tgX + TW / 2 - TR;
+        let soundOn = !(window.SoundMgr?.muted ?? false);
+
+        const tgBg = this.add.graphics();
+        const redrawToggle = (on) => {
+            tgBg.clear();
+            tgBg.fillStyle(on ? 0x27AE60 : 0x3A3A50, 1);
+            tgBg.fillRoundedRect(tgX - TW / 2, row1Y - TH / 2, TW, TH, TR);
+        };
+        redrawToggle(soundOn);
+        container.add(tgBg);
+
+        const tgKnob = this.add.graphics();
+        tgKnob.fillStyle(0xFFFFFF, 1);
+        tgKnob.fillCircle(0, 0, TR - 4);
+        tgKnob.setPosition(soundOn ? tgOnX : tgOffX, row1Y);
+        container.add(tgKnob);
+
+        const tgLabel = this.add.text(tgX, row1Y, soundOn ? 'BẬT' : 'TẮT', {
+            fontFamily: 'Outfit', fontSize: '9px', fontStyle: 'bold',
+            color: '#FFFFFF', resolution: 2,
+        }).setOrigin(0.5);
+        container.add(tgLabel);
+
+        const tgZone = this.add.zone(tgX, row1Y, TW, TH).setInteractive({ useHandCursor: true });
+        tgZone.on('pointerdown', () => {
+            soundOn = !soundOn;
+            redrawToggle(soundOn);
+            tgLabel.setText(soundOn ? 'BẬT' : 'TẮT');
+            this.tweens.add({ targets: tgKnob, x: soundOn ? tgOnX : tgOffX, duration: 160, ease: 'Quad.easeOut' });
+            const muted = window.SoundMgr?.toggleMute();
+            if (this.muteBtnIcon) this.muteBtnIcon.setText(muted ? '🔇' : '🔊');
+            if (!muted) window.SoundMgr?.buttonClick();
+        });
+        container.add(tgZone);
+
+        addDivider(pTop + 108);
+
+        // ── Volume row helper ────────────────────────────────────────
+        const STEPS = 5;
+        const BAR_W = 88, SEG_H = 14, SEG_GAP = 3;
+        const segW = (BAR_W - (STEPS - 1) * SEG_GAP) / STEPS;
+        // Controls area: minus at cx-62, bar centred, plus at cx+62
+        const minusX = cx - 62, plusX = cx + 62;
+        const barStartX = minusX + 22;
+
+        const drawVolBar = (gfx, y, filled, color) => {
+            gfx.clear();
+            for (let i = 0; i < STEPS; i++) {
+                const sx = barStartX + i * (segW + SEG_GAP);
+                gfx.fillStyle(i < filled ? color : 0x252535, 1);
+                gfx.fillRoundedRect(sx, y - SEG_H / 2, segW, SEG_H, 3);
+            }
+        };
+
+        const addVolBtn = (x, y, label, onClick) => {
+            const bg = this.add.graphics();
+            bg.fillStyle(0x252535, 1);
+            bg.fillCircle(x, y, 14);
+            bg.lineStyle(1.5, 0x444455, 1);
+            bg.strokeCircle(x, y, 14);
+            const txt = this.add.text(x, y - 1, label, {
+                fontFamily: 'Outfit', fontSize: '20px', fontStyle: 'bold',
+                color: '#AAAACC', resolution: 2,
+            }).setOrigin(0.5);
+            const zone = this.add.zone(x, y, 32, 32).setInteractive({ useHandCursor: true });
+            zone.on('pointerdown', onClick);
+            this._addBtnPress(zone, [bg, txt]);
+            container.add(bg);
+            container.add(txt);
+            container.add(zone);
+        };
+
+        // ── Music volume ─────────────────────────────────────────────
+        const row2Y = pTop + 138;
+        container.add(this.add.text(pLeft + 20, row2Y, '🎵  Nhạc nền', {
+            fontFamily: 'Outfit', fontSize: '13px', color: '#9999BB', resolution: 2,
+        }).setOrigin(0, 0.5));
+
+        let musicVol = window.SoundMgr?.musicVolume ?? 4;
+        const musicBarGfx = this.add.graphics();
+        drawVolBar(musicBarGfx, row2Y, musicVol, 0x7B6CF6);
+        container.add(musicBarGfx);
+
+        addVolBtn(minusX, row2Y, '−', () => {
+            musicVol = Math.max(0, musicVol - 1);
+            window.SoundMgr?.setMusicVolume(musicVol);
+            drawVolBar(musicBarGfx, row2Y, musicVol, 0x7B6CF6);
+            if (musicVol > 0) window.SoundMgr?.buttonClick();
+        });
+        addVolBtn(plusX, row2Y, '+', () => {
+            musicVol = Math.min(STEPS, musicVol + 1);
+            window.SoundMgr?.setMusicVolume(musicVol);
+            drawVolBar(musicBarGfx, row2Y, musicVol, 0x7B6CF6);
+            window.SoundMgr?.buttonClick();
+        });
+
+        // ── SFX volume ───────────────────────────────────────────────
+        const row3Y = pTop + 186;
+        container.add(this.add.text(pLeft + 20, row3Y, '🎛  Hiệu ứng âm', {
+            fontFamily: 'Outfit', fontSize: '13px', color: '#9999BB', resolution: 2,
+        }).setOrigin(0, 0.5));
+
+        let sfxVol = window.SoundMgr?.sfxVolume ?? 5;
+        const sfxBarGfx = this.add.graphics();
+        drawVolBar(sfxBarGfx, row3Y, sfxVol, 0x27AE60);
+        container.add(sfxBarGfx);
+
+        addVolBtn(minusX, row3Y, '−', () => {
+            sfxVol = Math.max(0, sfxVol - 1);
+            window.SoundMgr?.setSfxVolume(sfxVol);
+            drawVolBar(sfxBarGfx, row3Y, sfxVol, 0x27AE60);
+            if (sfxVol > 0) window.SoundMgr?.buttonClick();
+        });
+        addVolBtn(plusX, row3Y, '+', () => {
+            sfxVol = Math.min(STEPS, sfxVol + 1);
+            window.SoundMgr?.setSfxVolume(sfxVol);
+            drawVolBar(sfxBarGfx, row3Y, sfxVol, 0x27AE60);
+            window.SoundMgr?.buttonClick();
+        });
+
+        addDivider(pTop + 216);
+
+        // ── Restart button ───────────────────────────────────────────
+        const btnY = pTop + 256;
         const restartBg = this.add.graphics();
         restartBg.fillStyle(0xE67E22, 1);
         restartBg.fillRoundedRect(cx - 100, btnY - 22, 200, 44, 12);
