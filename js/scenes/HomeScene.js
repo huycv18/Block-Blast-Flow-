@@ -126,57 +126,74 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
 
     // ──────────────────────────────────────────────────────────
     _buildHeader(W, cx) {
-        const pillY = 32, pillW = 80, pillH = 28, pillR = 14;
+        // Layout constants
+        const HY    = 44;               // vertical centre of header row
+        const pW    = 74, pH = 28, pR = 14;  // pill size
+        const GAP   = 6;                // gap between pills
+        const RPAD  = 8;                // right edge padding
+        const GEAR_R = 13;              // gear icon radius
+        const GEAR_GAP = 10;            // gap between gear and first pill
 
-        // ── Profile avatar button (top-left) ─────────────────
+        // Right-to-left positions
+        const cpX   = W - RPAD - pW;                      // coin pill left edge
+        const hpX   = cpX - GAP - pW;                     // heart pill left edge
+        const gearX = hpX - GEAR_GAP - GEAR_R;            // gear centre x
+        const pillTop = HY - pH / 2;
+
+        // ── Single container for the entire right-side HUD ───
+        const hud = this.add.container(0, 0).setDepth(10).setAlpha(0);
+
+        // ── Gear / Settings ───────────────────────────────────
+        const gearGfx = this.add.graphics();
+        gearGfx.lineStyle(2.5, 0xBBBBDD, 1);
+        gearGfx.strokeCircle(gearX, HY, GEAR_R);
+        for (let i = 0; i < 6; i++) {
+            const a = (i * Math.PI) / 3;
+            gearGfx.lineBetween(
+                gearX + Math.cos(a) * (GEAR_R - 5), HY + Math.sin(a) * (GEAR_R - 5),
+                gearX + Math.cos(a) * (GEAR_R + 2), HY + Math.sin(a) * (GEAR_R + 2)
+            );
+        }
+        gearGfx.fillStyle(0xBBBBDD, 1); gearGfx.fillCircle(gearX, HY, 3.5);
+        hud.add(gearGfx);
+        const gearZone = this.add.zone(gearX, HY, 34, 34).setInteractive({ useHandCursor: true });
+        hud.add(gearZone);
+        gearZone.on('pointerdown', () => { window.SoundMgr?.buttonClick(); this._openHomeSettings(); });
+
+        // ── Heart pill ────────────────────────────────────────
+        const hGfx = this.add.graphics();
+        hGfx.fillStyle(0x1A0808, 1); hGfx.fillRoundedRect(hpX, pillTop, pW, pH, pR);
+        hGfx.lineStyle(1.5, 0xCC2222, 0.6); hGfx.strokeRoundedRect(hpX, pillTop, pW, pH, pR);
+        hud.add(hGfx);
+        hud.add(this.add.image(hpX + 15, HY, 'heart_icon'));
+        this._heartsText = this.add.text(hpX + 29, HY, `${this._hearts}`, {
+            fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold', color: '#FF6B8A', resolution: 2,
+        }).setOrigin(0, 0.5);
+        hud.add(this._heartsText);
+
+        // ── Coin pill ─────────────────────────────────────────
+        const cGfx = this.add.graphics();
+        cGfx.fillStyle(0x1A150A, 1); cGfx.fillRoundedRect(cpX, pillTop, pW, pH, pR);
+        cGfx.lineStyle(1.5, 0xAA8800, 0.6); cGfx.strokeRoundedRect(cpX, pillTop, pW, pH, pR);
+        hud.add(cGfx);
+        hud.add(this.add.image(cpX + 15, HY, 'coin_icon'));
+        this._coinsText = this.add.text(cpX + 29, HY, `${this._coins}`, {
+            fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold', color: '#F1C40F', resolution: 2,
+        }).setOrigin(0, 0.5);
+        hud.add(this._coinsText);
+
+        this.tweens.add({ targets: hud, alpha: 1, duration: 400, delay: 200 });
+
+        // ── Profile avatar button (left — separate, no depth conflict) ──
         const r = 22, bx = 40, by = 44;
         this._profGfx = this.add.graphics().setDepth(10).setAlpha(0);
         this._profEmoji = this.add.text(bx, by, _AVATARS[this._pAvatar], {
             fontSize: '24px', resolution: 2,
         }).setOrigin(0.5).setDepth(11).setAlpha(0);
         this._drawHeaderAvatar();
-
         this.add.zone(bx, by, 52, 52).setInteractive({ useHandCursor: true }).setDepth(12)
             .on('pointerdown', () => { window.SoundMgr?.buttonClick(); this._openProfileModal(); });
         this.tweens.add({ targets: [this._profGfx, this._profEmoji], alpha: 1, duration: 400, delay: 200 });
-
-        // ── Settings button (top-right) ───────────────────────
-        const settingsGfx = this.add.graphics().setDepth(10).setAlpha(0);
-        settingsGfx.lineStyle(2.5, 0x9999BB, 1);
-        settingsGfx.strokeCircle(W - 22, 22, 13);
-        for (let i = 0; i < 6; i++) {
-            const a = (i * Math.PI) / 3;
-            settingsGfx.lineBetween(
-                W - 22 + Math.cos(a) * 7, 22 + Math.sin(a) * 7,
-                W - 22 + Math.cos(a) * 11, 22 + Math.sin(a) * 11
-            );
-        }
-        settingsGfx.fillStyle(0x9999BB, 1); settingsGfx.fillCircle(W - 22, 22, 3.5);
-        this.add.zone(W - 22, 22, 34, 34).setInteractive({ useHandCursor: true }).setDepth(12)
-            .on('pointerdown', () => { window.SoundMgr?.buttonClick(); this._openHomeSettings(); });
-        this.tweens.add({ targets: settingsGfx, alpha: 1, duration: 400, delay: 200 });
-
-        // ── Heart pill ────────────────────────────────────────
-        const hpX = W - pillW * 2 - 12;
-        const hPill = this.add.graphics().setDepth(10).setAlpha(0);
-        hPill.fillStyle(0x1A0808, 1); hPill.fillRoundedRect(hpX, pillY, pillW, pillH, pillR);
-        hPill.lineStyle(1.5, 0xCC2222, 0.6); hPill.strokeRoundedRect(hpX, pillY, pillW, pillH, pillR);
-        const hIcon = this.add.image(hpX + 16, pillY + pillH / 2, 'heart_icon').setDepth(11).setAlpha(0);
-        this._heartsText = this.add.text(hpX + 30, pillY + pillH / 2, `${this._hearts}`, {
-            fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold', color: '#FF6B8A', resolution: 2,
-        }).setOrigin(0, 0.5).setDepth(11).setAlpha(0);
-        this.tweens.add({ targets: [hPill, hIcon, this._heartsText], alpha: 1, duration: 400, delay: 200 });
-
-        // ── Coin pill ─────────────────────────────────────────
-        const cpX = W - pillW - 6;
-        const cPill = this.add.graphics().setDepth(10).setAlpha(0);
-        cPill.fillStyle(0x1A150A, 1); cPill.fillRoundedRect(cpX, pillY, pillW, pillH, pillR);
-        cPill.lineStyle(1.5, 0xAA8800, 0.6); cPill.strokeRoundedRect(cpX, pillY, pillW, pillH, pillR);
-        const cIcon = this.add.image(cpX + 16, pillY + pillH / 2, 'coin_icon').setDepth(11).setAlpha(0);
-        this._coinsText = this.add.text(cpX + 30, pillY + pillH / 2, `${this._coins}`, {
-            fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold', color: '#F1C40F', resolution: 2,
-        }).setOrigin(0, 0.5).setDepth(11).setAlpha(0);
-        this.tweens.add({ targets: [cPill, cIcon, this._coinsText], alpha: 1, duration: 400, delay: 200 });
     }
 
     _drawHeaderAvatar() {
