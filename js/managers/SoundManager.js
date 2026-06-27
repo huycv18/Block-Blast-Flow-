@@ -280,18 +280,18 @@ window.SoundManager = class SoundManager {
 
     // ── Background Music ─────────────────────────────────────────────────
     //
-    // 120 BPM, 16th-note steps, C-major pentatonic loop.
+    // 126 BPM, 16th-note steps, G-major pentatonic loop.
+    // Marimba melody + chord arpeggio pad + soft rimshot percussion.
     //
     // Pentatonic index table (freq in Hz):
-    //  0=C2  1=D2  2=E2  3=G2  4=A2
-    //  5=C3  6=D3  7=E3  8=G3  9=A3
-    // 10=C4 11=D4 12=E4 13=G4 14=A4
-    // 15=C5 16=D5 17=E5 18=G5 19=A5
+    //  0=G2  1=A2  2=B2  3=D3  4=E3
+    //  5=G3  6=A3  7=B3  8=D4  9=E4
+    // 10=G4 11=A4 12=B4 13=D5 14=E5
+    // 15=G5 16=A5 17=B5 18=D6 19=E6
 
     startMusic() {
         if (this._musicPlaying) return;
         if (!this.ctx) return;
-        // If context not yet running, retry after first user interaction
         if (this.ctx.state !== 'running') {
             const retry = () => {
                 this.ctx.resume().then(() => this.startMusic());
@@ -300,7 +300,6 @@ window.SoundManager = class SoundManager {
             document.addEventListener('pointerdown', retry, { once: true, passive: true });
             return;
         }
-        // Fade in gently
         this.musicGain.gain.setValueAtTime(0, this.ctx.currentTime);
         this.musicGain.gain.linearRampToValueAtTime(0.22, this.ctx.currentTime + 2.0);
         this._musicPlaying = true;
@@ -314,7 +313,6 @@ window.SoundManager = class SoundManager {
         if (this._musicTimer) { clearTimeout(this._musicTimer); this._musicTimer = null; }
         if (this.musicGain && this.ctx) {
             this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, fadeDur / 4);
-            // Restore base level after fade
             setTimeout(() => {
                 if (this.musicGain) this.musicGain.gain.value = 0.22;
             }, fadeDur * 1000 + 200);
@@ -325,27 +323,37 @@ window.SoundManager = class SoundManager {
         if (!this._musicPlaying || !this.ctx) return;
 
         const LOOK_AHEAD = 0.14;
-        const BPM  = 120;
-        const step = 60 / BPM / 4; // 16th note = 0.125 s
+        const BPM  = 126;
+        const step = 60 / BPM / 4; // 16th note ≈ 0.119 s
 
         const penta = [
-            65.41, 73.42, 82.41, 97.99, 110.00,    // C2..A2 (0-4)
-            130.81, 146.83, 164.81, 195.99, 220.00, // C3..A3 (5-9)
-            261.63, 293.66, 329.63, 391.99, 440.00, // C4..A4 (10-14)
-            523.25, 587.33, 659.25, 783.99, 880.00, // C5..A5 (15-19)
+             98.00, 110.00, 123.47, 146.83, 164.81,  // G2..E3 (0-4)
+            196.00, 220.00, 246.94, 293.66, 329.63,  // G3..E4 (5-9)
+            392.00, 440.00, 493.88, 587.33, 659.25,  // G4..E5 (10-14)
+            783.99, 880.00, 987.77,1174.66,1318.51,  // G5..E6 (15-19)
         ];
 
-        // 32-step patterns (2 bars @ 120 BPM)
+        // 32-step patterns (2 bars @ 126 BPM)
+        // Melody — bouncy marimba feel
         const melody = [
-            15,-1,17,-1,18,-1,17,-1,  16,-1,17,-1,19,-1,18,-1,
-            17,-1,18,-1,19,-1,18,-1,  15,-1,16,-1,17,-1,15,-1,
+            10,-1,12,-1, 13,-1,12,-1, 10,-1,11,-1, 10,-1,-1,-1,
+            13,-1,14,-1, 13,-1,11,-1, 10,-1,12,-1, 10,-1,-1,-1,
         ];
+        // Chord arpeggio pad — quiet triangle, fills harmony
+        const chord = [
+             5,-1,-1,-1,  7,-1,-1,-1,  8,-1,-1,-1,  7,-1,-1,-1,
+             8,-1,-1,-1,  9,-1,-1,-1,  8,-1,-1,-1,  7,-1,-1,-1,
+        ];
+        // Bass — root notes
         const bass = [
-            5,-1,-1,-1, 5,-1,-1,-1, 8,-1,-1,-1, 8,-1,-1,-1,
-            9,-1,-1,-1, 9,-1,-1,-1, 5,-1,-1,-1, 5,-1,-1,-1,
+             0,-1,-1,-1,  0,-1,-1,-1,  3,-1,-1,-1,  3,-1,-1,-1,
+             4,-1,-1,-1,  4,-1,-1,-1,  0,-1,-1,-1,  0,-1,-1,-1,
         ];
+        // Light kick on 1 & 3 only
         const kick  = [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0, 1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0];
-        const snare = [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0, 0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0];
+        // Rimshot on 2 & 4
+        const rim   = [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0, 0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0];
+        // Hihat every 8th note
         const hihat = [1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0, 1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0];
         const LEN   = melody.length;
 
@@ -353,21 +361,26 @@ window.SoundManager = class SoundManager {
             const s = this._musicStep % LEN;
             const t = this._nextNoteTime;
 
-            // Melody (triangle, light)
+            // Melody — short marimba attack (triangle, fast decay)
             if (melody[s] >= 0) {
-                this._mNote(penta[melody[s]], 0.062, t, step * 0.78, 'triangle');
+                this._mNote(penta[melody[s]], 0.075, t, step * 0.55, 'triangle');
             }
 
-            // Bass (sine, quarter-note length)
+            // Chord arpeggio pad (sine, long, very quiet)
+            if (chord[s] >= 0) {
+                this._mNote(penta[chord[s]], 0.038, t, step * 3.8, 'sine');
+            }
+
+            // Bass (sine, quarter-note)
             if (bass[s] >= 0) {
-                this._mNote(penta[bass[s]] * 0.5, 0.18, t, step * 3.6, 'sine');
+                this._mNote(penta[bass[s]] * 0.5, 0.16, t, step * 3.5, 'sine');
             }
 
-            // Kick
+            // Kick (softer thump)
             if (kick[s]) this._mKick(t);
 
-            // Snare
-            if (snare[s]) this._mSnare(t);
+            // Rimshot instead of snare
+            if (rim[s]) this._mNoise(t, 0.038, 0.055, 'bandpass', 2400, 3.0);
 
             // Hi-hat
             if (hihat[s]) this._mHat(t);
