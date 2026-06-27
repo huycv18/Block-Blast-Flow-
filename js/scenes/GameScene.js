@@ -109,7 +109,8 @@ window.GameScene = class GameScene extends Phaser.Scene {
         // Start audio (resume context on first interaction, then start music)
         window.SoundMgr?.startMusic();
 
-        // Start playing
+        // Save progress and start playing
+        try { localStorage.setItem('bbf_currentLevel', this.currentLevel); } catch {}
         this.gameState.setState('PLAYING');
 
         // Launch UI overlay
