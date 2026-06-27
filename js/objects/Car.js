@@ -271,11 +271,13 @@ window.Car = class Car {
                 if (particles && particles.destroy) particles.destroy();
             });
 
-            // Scale pop on container
+            // Kill slide tween and snap to final active position
+            scene.tweens.killTweensOf(this.container);
+            this.container.setY(CONFIG.CAR_ROW1_Y);
+            this.container.setAlpha(1);
+
             const origScaleX = this.container.scaleX;
             const origScaleY = this.container.scaleY;
-
-            scene.tweens.killTweensOf(this.container);
 
             // Flash: scale up slightly while swapping visuals
             scene.tweens.add({
@@ -492,6 +494,11 @@ window.Car = class Car {
                 duration: CONFIG.CAR_ADVANCE_DURATION,
                 ease: 'Back.easeOut',
                 onComplete: () => {
+                    this.isActive = true;
+                    resolve();
+                },
+                onStop: () => {
+                    // reveal() kills this tween mid-slide — resolve so peekCar still gets shown
                     this.isActive = true;
                     resolve();
                 },
