@@ -134,10 +134,10 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         const GEAR_R = 13;              // gear icon radius
         const GEAR_GAP = 10;            // gap between gear and first pill
 
-        // Right-to-left positions
-        const cpX   = W - RPAD - pW;                      // coin pill left edge
+        // Right-to-left positions — gear is rightmost
+        const gearX = W - RPAD - GEAR_R;                  // gear centre x (far right)
+        const cpX   = gearX - GEAR_R - GEAR_GAP - pW;     // coin pill left edge
         const hpX   = cpX - GAP - pW;                     // heart pill left edge
-        const gearX = hpX - GEAR_GAP - GEAR_R;            // gear centre x
         const pillTop = HY - pH / 2;
 
         // ── Single container for the entire right-side HUD ───
