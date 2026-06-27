@@ -271,7 +271,10 @@ window.Car = class Car {
                 if (particles && particles.destroy) particles.destroy();
             });
 
-            // Kill slide tween and snap to final active position
+            // Complete any pending slideForward promise so onCarFull can show peekCar
+            this._completeSlide();
+
+            // Snap to active row and kill remaining tweens
             scene.tweens.killTweensOf(this.container);
             this.container.setY(CONFIG.CAR_ROW1_Y);
             this.container.setAlpha(1);
@@ -480,6 +483,8 @@ window.Car = class Car {
 
     slideForward(targetX, targetY) {
         return new Promise(resolve => {
+            this._pendingSlideResolve = resolve;
+
             this.container.setPosition(targetX, CONFIG.CAR_ROW2_Y);
             this.container.setScale(CONFIG.CAR_ROW2_SCALE);
             this.container.setAlpha(CONFIG.CAR_ROW2_ALPHA);
@@ -495,15 +500,20 @@ window.Car = class Car {
                 ease: 'Back.easeOut',
                 onComplete: () => {
                     this.isActive = true;
-                    resolve();
-                },
-                onStop: () => {
-                    // reveal() kills this tween mid-slide — resolve so peekCar still gets shown
-                    this.isActive = true;
+                    this._pendingSlideResolve = null;
                     resolve();
                 },
             });
         });
+    }
+
+    _completeSlide() {
+        if (this._pendingSlideResolve) {
+            const done = this._pendingSlideResolve;
+            this._pendingSlideResolve = null;
+            this.isActive = true;
+            done();
+        }
     }
 
     setPosition(x, y) {
