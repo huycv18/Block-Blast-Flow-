@@ -2,14 +2,14 @@
 // HomeScene — Main menu / home screen (Royal Match style)
 // ============================================================
 
-const _AVATARS  = ['🐱','🐶','🦊','🐼','🐸','🦁','🐯','🐺','🐨','🐰'];
-const _AVBG     = [0xE74C3C,0xE67E22,0xF39C12,0x27AE60,0x16A085,0x2980B9,0x8E44AD,0xE91E63,0x546E7A,0x6D4C41];
-const _FRAMES   = [
-    { color: null,     label: '✕' },
-    { color: 0xF1C40F, label: '' },
-    { color: 0x9B59B6, label: '' },
-    { color: 0x3498DB, label: '' },
-    { color: 0xE74C3C, label: '' },
+const _AVATARS = ['🐱','🐶','🦊','🐼','🐸','🦁','🐯','🐺','🐨','🐰'];
+const _AVBG    = [0xE74C3C,0xE67E22,0xF39C12,0x27AE60,0x16A085,0x2980B9,0x8E44AD,0xE91E63,0x546E7A,0x6D4C41];
+const _FRAMES  = [
+    { color: null,     label: 'None'   },
+    { color: 0xF1C40F, label: 'Gold'   },
+    { color: 0x9B59B6, label: 'Purple' },
+    { color: 0x3498DB, label: 'Blue'   },
+    { color: 0xE74C3C, label: 'Red'    },
 ];
 
 window.HomeScene = class HomeScene extends Phaser.Scene {
@@ -17,10 +17,8 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
 
     create() {
         const W = CONFIG.GAME_WIDTH, H = CONFIG.GAME_HEIGHT, cx = W / 2;
-
         this.cameras.main.fadeIn(400, 0, 0, 0);
         window.SoundMgr?.startMusic();
-
         this._readProfile();
 
         // ── Background ───────────────────────────────────────────
@@ -51,27 +49,24 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
             parseInt(localStorage.getItem('bbf_currentLevel') || '0'), LEVELS.length - 1
         );
         this._savedLevel = savedLevel;
-        const levelData  = LEVELS[savedLevel] || LEVELS[0];
-        const DIFF_COL   = { Tutorial: 0x27AE60, Easy: 0x2980B9, Normal: 0xF39C12, Hard: 0xC0392B };
-        const DIFF_HEX   = { Tutorial: '#2ECC71', Easy: '#3498DB', Normal: '#F1C40F', Hard: '#E74C3C' };
+        const levelData = LEVELS[savedLevel] || LEVELS[0];
+        const DIFF_COL  = { Tutorial: 0x27AE60, Easy: 0x2980B9, Normal: 0xF39C12, Hard: 0xC0392B };
+        const DIFF_HEX  = { Tutorial: '#2ECC71', Easy: '#3498DB', Normal: '#F1C40F', Hard: '#E74C3C' };
         const dColor = DIFF_COL[levelData.difficulty] || 0x555577;
         const dHex   = DIFF_HEX[levelData.difficulty] || '#AAAACC';
 
         const cardY = H * 0.572, cardW = 300, cardH = 92, cL = cx - cardW / 2;
-        const card  = this.add.graphics().setAlpha(0);
+        const card = this.add.graphics().setAlpha(0);
         card.fillStyle(0x1C1C30, 1); card.fillRoundedRect(cL, cardY - cardH / 2, cardW, cardH, 14);
         card.lineStyle(2, dColor, 0.7); card.strokeRoundedRect(cL, cardY - cardH / 2, cardW, cardH, 14);
         card.fillStyle(dColor, 1); card.fillRoundedRect(cL, cardY - cardH / 2, 6, cardH, { tl: 14, tr: 0, bl: 14, br: 0 });
 
         const lvlTxt  = this.add.text(cx + 3, cardY - 20, `Level ${levelData.id}`, {
-            fontFamily: 'Outfit', fontSize: '22px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
-        }).setOrigin(0.5).setAlpha(0);
+            fontFamily: 'Outfit', fontSize: '22px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2 }).setOrigin(0.5).setAlpha(0);
         const diffTxt = this.add.text(cx + 3, cardY + 6, levelData.difficulty, {
-            fontFamily: 'Outfit', fontSize: '13px', fontStyle: 'bold', color: dHex, resolution: 2,
-        }).setOrigin(0.5).setAlpha(0);
+            fontFamily: 'Outfit', fontSize: '13px', fontStyle: 'bold', color: dHex, resolution: 2 }).setOrigin(0.5).setAlpha(0);
         const starTxt = this.add.text(cx + 3, cardY + 30, '☆  ☆  ☆', {
-            fontFamily: 'Outfit', fontSize: '17px', color: '#2A2A48', resolution: 2,
-        }).setOrigin(0.5).setAlpha(0);
+            fontFamily: 'Outfit', fontSize: '17px', color: '#2A2A48', resolution: 2 }).setOrigin(0.5).setAlpha(0);
         [card, lvlTxt, diffTxt, starTxt].forEach((o, i) =>
             this.tweens.add({ targets: o, alpha: 1, duration: 380, delay: 280 + i * 70, ease: 'Quad.easeOut' })
         );
@@ -113,119 +108,123 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         }).setOrigin(0.5).setAlpha(0);
         this.tweens.add({ targets: footer, alpha: 0.7, duration: 500, delay: 700 });
 
-        // Profile modal (built last → renders on top)
+        // Profile modal — built LAST so it renders on top of everything
         this._buildProfileModal(W, H, cx);
     }
 
     // ──────────────────────────────────────────────────────────
     _readProfile() {
-        const safe = (key, def, isInt) => {
-            try {
-                const v = localStorage.getItem(key);
-                if (v === null) return def;
-                return isInt ? (isNaN(parseInt(v)) ? def : parseInt(v)) : v;
-            } catch { return def; }
-        };
-        this._pName   = safe('bbf_name',   'Player', false);
-        this._pAvatar = safe('bbf_avatar', 0,        true);
-        this._pFrame  = safe('bbf_frame',  0,        true);
-        this._hearts  = safe('bbf_hearts', 5,        true);
-        this._coins   = safe('bbf_coins',  0,        true);
+        const si = (key, def) => { try { const v = parseInt(localStorage.getItem(key)); return isNaN(v) ? def : v; } catch { return def; } };
+        const ss = (key, def) => { try { return localStorage.getItem(key) || def; } catch { return def; } };
+        this._pName   = ss('bbf_name',   'Player');
+        this._pAvatar = si('bbf_avatar', 0);
+        this._pFrame  = si('bbf_frame',  0);
+        this._hearts  = si('bbf_hearts', 5);
+        this._coins   = si('bbf_coins',  0);
     }
 
     // ──────────────────────────────────────────────────────────
     _buildHeader(W, cx) {
-        const pillY = 28, pillW = 82, pillH = 30, pillR = 15;
+        const pillY = 24, pillW = 80, pillH = 32, pillR = 16;
 
         // ── Profile avatar button (top-left) ─────────────────
-        const r = 24, bx = 42, by = 44;
-        const profGfx = this.add.graphics().setDepth(10).setAlpha(0);
-        this._profGfx = profGfx;
-        const profEmoji = this.add.text(bx, by, _AVATARS[this._pAvatar], {
-            fontSize: '26px', resolution: 2,
+        const r = 22, bx = 40, by = 44;
+        this._profGfx = this.add.graphics().setDepth(10).setAlpha(0);
+        this._profEmoji = this.add.text(bx, by, _AVATARS[this._pAvatar], {
+            fontSize: '24px', resolution: 2,
         }).setOrigin(0.5).setDepth(11).setAlpha(0);
-        this._profEmoji = profEmoji;
         this._drawHeaderAvatar();
 
-        const profZone = this.add.zone(bx, by, 56, 56).setInteractive({ useHandCursor: true }).setDepth(12);
-        profZone.on('pointerdown', () => {
-            window.SoundMgr?.buttonClick();
-            this._openProfileModal();
-        });
-        this.tweens.add({ targets: [profGfx, profEmoji], alpha: 1, duration: 400, delay: 200 });
+        this.add.zone(bx, by, 52, 52).setInteractive({ useHandCursor: true }).setDepth(12)
+            .on('pointerdown', () => { window.SoundMgr?.buttonClick(); this._openProfileModal(); });
+        this.tweens.add({ targets: [this._profGfx, this._profEmoji], alpha: 1, duration: 400, delay: 200 });
 
         // ── Heart pill ────────────────────────────────────────
-        const hpX = W - pillW * 2 - 14;
+        const hpX = W - pillW * 2 - 12;
         const hPill = this.add.graphics().setDepth(10).setAlpha(0);
         hPill.fillStyle(0x1A0808, 1); hPill.fillRoundedRect(hpX, pillY, pillW, pillH, pillR);
-        hPill.lineStyle(1, 0xCC2222, 0.55); hPill.strokeRoundedRect(hpX, pillY, pillW, pillH, pillR);
-        const hIcon = this.add.image(hpX + 16, pillY + 15, 'heart_icon').setDepth(11).setAlpha(0);
-        this._heartsText = this.add.text(hpX + 30, pillY + 15, `${this._hearts}`, {
-            fontFamily: 'Outfit', fontSize: '13px', fontStyle: 'bold', color: '#FF6B8A', resolution: 2,
+        hPill.lineStyle(1.5, 0xCC2222, 0.6); hPill.strokeRoundedRect(hpX, pillY, pillW, pillH, pillR);
+        const hIcon = this.add.image(hpX + 16, pillY + pillH / 2, 'heart_icon').setDepth(11).setAlpha(0);
+        this._heartsText = this.add.text(hpX + 30, pillY + pillH / 2, `${this._hearts}`, {
+            fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold', color: '#FF6B8A', resolution: 2,
         }).setOrigin(0, 0.5).setDepth(11).setAlpha(0);
         this.tweens.add({ targets: [hPill, hIcon, this._heartsText], alpha: 1, duration: 400, delay: 200 });
 
         // ── Coin pill ─────────────────────────────────────────
-        const cpX = W - pillW - 8;
+        const cpX = W - pillW - 6;
         const cPill = this.add.graphics().setDepth(10).setAlpha(0);
         cPill.fillStyle(0x1A150A, 1); cPill.fillRoundedRect(cpX, pillY, pillW, pillH, pillR);
-        cPill.lineStyle(1, 0xAA8800, 0.55); cPill.strokeRoundedRect(cpX, pillY, pillW, pillH, pillR);
-        const cIcon = this.add.image(cpX + 16, pillY + 15, 'coin_icon').setDepth(11).setAlpha(0);
-        this._coinsText = this.add.text(cpX + 30, pillY + 15, `${this._coins}`, {
-            fontFamily: 'Outfit', fontSize: '13px', fontStyle: 'bold', color: '#F1C40F', resolution: 2,
+        cPill.lineStyle(1.5, 0xAA8800, 0.6); cPill.strokeRoundedRect(cpX, pillY, pillW, pillH, pillR);
+        const cIcon = this.add.image(cpX + 16, pillY + pillH / 2, 'coin_icon').setDepth(11).setAlpha(0);
+        this._coinsText = this.add.text(cpX + 30, pillY + pillH / 2, `${this._coins}`, {
+            fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold', color: '#F1C40F', resolution: 2,
         }).setOrigin(0, 0.5).setDepth(11).setAlpha(0);
         this.tweens.add({ targets: [cPill, cIcon, this._coinsText], alpha: 1, duration: 400, delay: 200 });
     }
 
     _drawHeaderAvatar() {
-        const r = 24, bx = 42, by = 44;
+        const r = 22, bx = 40, by = 44;
         this._profGfx.clear();
         const fc = _FRAMES[this._pFrame].color;
         if (fc) { this._profGfx.fillStyle(fc, 1); this._profGfx.fillCircle(bx, by, r + 4); }
         this._profGfx.fillStyle(_AVBG[this._pAvatar], 1); this._profGfx.fillCircle(bx, by, r);
-        this._profGfx.lineStyle(1.5, 0xFFFFFF, 0.3); this._profGfx.strokeCircle(bx, by, r);
+        this._profGfx.lineStyle(1.5, 0xFFFFFF, 0.25); this._profGfx.strokeCircle(bx, by, r);
         this._profEmoji?.setText(_AVATARS[this._pAvatar]);
     }
 
     // ──────────────────────────────────────────────────────────
     _buildProfileModal(W, H, cx) {
-        const mW = 320, mH = 500, mX = cx - mW / 2, mY = H / 2 - mH / 2 - 10;
+        const mW = 320, mH = 490;
+        const mX = cx - mW / 2;
+        const mY = Math.round(H / 2 - mH / 2) - 10;
 
         const c = this.add.container(0, 0).setDepth(50).setVisible(false);
         this._profileContainer = c;
 
-        // Dim
+        // ── Step 1: dim overlay (index 0 — bottom of stack) ──
         const dim = this.add.graphics();
         dim.fillStyle(0x000000, 0.72); dim.fillRect(0, 0, W, H);
         c.add(dim);
 
-        // Panel
+        // ── Step 2: dimZone (index 1) — closes modal on tap outside panel ──
+        const dimZone = this.add.zone(cx, H / 2, W, H).setInteractive();
+        dimZone.on('pointerdown', () => this._closeProfileModal());
+        c.add(dimZone);
+
+        // ── Step 3: panel blocker (index 2) — swallows taps inside panel ──
+        // Prevents taps on empty panel space from bubbling to dimZone
+        const blocker = this.add.zone(cx, mY + mH / 2, mW, mH).setInteractive();
+        c.add(blocker);
+
+        // ── Step 4: All visible modal content (index 3+) ─────
+
+        // Panel background
         const panel = this.add.graphics();
-        panel.fillStyle(0x1A1A2E, 1); panel.fillRoundedRect(mX, mY, mW, mH, 20);
+        panel.fillStyle(0x16162A, 1); panel.fillRoundedRect(mX, mY, mW, mH, 20);
         panel.fillStyle(0x7B6CF6, 1); panel.fillRoundedRect(mX, mY, mW, 52, { tl:20, tr:20, bl:0, br:0 });
-        panel.lineStyle(1.5, 0x4A3CC8, 0.6); panel.strokeRoundedRect(mX, mY, mW, mH, 20);
+        panel.lineStyle(1.5, 0x4A3CC8, 0.5); panel.strokeRoundedRect(mX, mY, mW, mH, 20);
         c.add(panel);
 
         // Title
         c.add(this.add.text(cx, mY + 26, 'MY PROFILE', {
-            fontFamily: 'Outfit', fontSize: '17px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
+            fontFamily: 'Outfit', fontSize: '16px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
         }).setOrigin(0.5));
 
         // Close ✕
-        const closeX = mX + mW - 26, closeY = mY + 26;
-        const closeTxt  = this.add.text(closeX, closeY, '✕', { fontSize: '18px', color: '#FFFFFF', resolution: 2 }).setOrigin(0.5);
+        const closeX = mX + mW - 28, closeY = mY + 26;
+        c.add(this.add.text(closeX, closeY, '✕', {
+            fontFamily: 'Outfit', fontSize: '18px', color: '#CCCCEE', resolution: 2,
+        }).setOrigin(0.5));
         const closeZone = this.add.zone(closeX, closeY, 44, 44).setInteractive({ useHandCursor: true });
-        c.add([closeTxt, closeZone]);
+        c.add(closeZone);
         closeZone.on('pointerdown', () => this._closeProfileModal());
 
-        // ── Big avatar circle ────────────────────────────────
-        const avCY = mY + 118, avR = 40;
-        const bigGfx = this.add.graphics();
-        c.add(bigGfx);
+        // ── Big avatar ────────────────────────────────────────
+        const avCY = mY + 116, avR = 40;
+        const bigGfx = this.add.graphics(); c.add(bigGfx);
         const bigEmoji = this.add.text(cx, avCY, _AVATARS[this._pAvatar], {
             fontSize: '42px', resolution: 2,
-        }).setOrigin(0.5);
-        c.add(bigEmoji);
+        }).setOrigin(0.5); c.add(bigEmoji);
 
         const redrawBigAv = () => {
             bigGfx.clear();
@@ -239,37 +238,38 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         this._redrawBigAv = redrawBigAv;
 
         // ── Name row ─────────────────────────────────────────
-        const nameY = mY + 180;
-        const nameTxt = this.add.text(cx, nameY, this._pName, {
+        const nameY = mY + 177;
+        const nameTxt = this.add.text(cx - 10, nameY, this._pName, {
             fontFamily: 'Outfit', fontSize: '19px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
-        }).setOrigin(0.5);
-        const penTxt = this.add.text(0, nameY, '✏', { fontSize: '15px', color: '#9999BB', resolution: 2 }).setOrigin(0, 0.5);
-        c.add([nameTxt, penTxt]);
+        }).setOrigin(0.5); c.add(nameTxt);
 
-        const syncPen = () => penTxt.setX(cx + nameTxt.width / 2 + 8);
+        const penTxt = this.add.text(0, nameY, '✏', {
+            fontSize: '14px', color: '#7777AA', resolution: 2,
+        }).setOrigin(0, 0.5); c.add(penTxt);
+
+        const syncPen = () => penTxt.setX(cx - 10 + nameTxt.width / 2 + 6);
         syncPen();
 
-        const nameZone = this.add.zone(cx, nameY, 240, 38).setInteractive({ useHandCursor: true });
-        c.add(nameZone);
+        const nameZone = this.add.zone(cx, nameY, 230, 36).setInteractive({ useHandCursor: true }); c.add(nameZone);
         nameZone.on('pointerdown', () => {
-            const n = window.prompt('Your name:', this._pName);
+            const n = window.prompt('Tên của bạn:', this._pName);
             if (n && n.trim()) {
                 this._pName = n.trim().slice(0, 16);
                 try { localStorage.setItem('bbf_name', this._pName); } catch {}
-                nameTxt.setText(this._pName);
-                syncPen();
+                nameTxt.setText(this._pName); syncPen();
             }
         });
 
         // ── Avatar grid label ─────────────────────────────────
-        c.add(this.add.text(mX + 16, mY + 206, 'Avatar', {
+        c.add(this.add.text(mX + 16, mY + 202, 'Chọn avatar', {
             fontFamily: 'Outfit', fontSize: '11px', color: '#7777AA', resolution: 2,
         }));
 
         // ── Avatar grid (5 × 2) ───────────────────────────────
-        const cols = 5, cellSz = 54;
-        const gridX = cx - (cols * cellSz) / 2;
-        const gridY = mY + 222;
+        const cols = 5, cellSz = 52;
+        const gridTotalW = cols * cellSz;
+        const gridX = cx - gridTotalW / 2;
+        const gridY = mY + 220;
         this._avSelGfx = [];
 
         for (let i = 0; i < _AVATARS.length; i++) {
@@ -278,12 +278,15 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
             const ay  = gridY + row * cellSz + cellSz / 2;
             const avR = 20;
 
-            const selG = this.add.graphics(); c.add(selG); this._avSelGfx.push(selG);
-            const avG  = this.add.graphics();
-            avG.fillStyle(_AVBG[i], 1); avG.fillCircle(ax, ay, avR); c.add(avG);
-            const avT  = this.add.text(ax, ay, _AVATARS[i], { fontSize: '21px', resolution: 2 }).setOrigin(0.5); c.add(avT);
+            const selG = this.add.graphics(); c.add(selG);
+            this._avSelGfx.push(selG);
 
-            const z = this.add.zone(ax, ay, cellSz - 4, cellSz - 4).setInteractive({ useHandCursor: true }); c.add(z);
+            const avG = this.add.graphics();
+            avG.fillStyle(_AVBG[i], 1); avG.fillCircle(ax, ay, avR); c.add(avG);
+
+            c.add(this.add.text(ax, ay, _AVATARS[i], { fontSize: '21px', resolution: 2 }).setOrigin(0.5));
+
+            const z = this.add.zone(ax, ay, cellSz - 2, cellSz - 2).setInteractive({ useHandCursor: true }); c.add(z);
             z.on('pointerdown', () => {
                 this._pAvatar = i;
                 try { localStorage.setItem('bbf_avatar', i); } catch {}
@@ -293,35 +296,41 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         }
 
         // ── Frame row label ───────────────────────────────────
-        const frLabelY = mY + 340;
-        c.add(this.add.text(mX + 16, frLabelY, 'Frame', {
+        const frLabelY = mY + 336;
+        c.add(this.add.text(mX + 16, frLabelY, 'Chọn khung', {
             fontFamily: 'Outfit', fontSize: '11px', color: '#7777AA', resolution: 2,
         }));
 
-        // ── Frame row ─────────────────────────────────────────
-        const frY = frLabelY + 30, frR = 17;
+        // ── Frame row (5 options) ─────────────────────────────
+        const frY    = frLabelY + 34, frR = 18;
         const frCellW = mW / _FRAMES.length;
         this._frSelGfx = [];
 
         for (let i = 0; i < _FRAMES.length; i++) {
-            const fx  = mX + frCellW * i + frCellW / 2;
-            const fc  = _FRAMES[i].color;
-            const selG = this.add.graphics(); c.add(selG); this._frSelGfx.push(selG);
+            const fx = mX + frCellW * i + frCellW / 2;
+            const fc = _FRAMES[i].color;
+
+            const selG = this.add.graphics(); c.add(selG);
+            this._frSelGfx.push(selG);
 
             const frG = this.add.graphics();
             if (fc) {
-                frG.fillStyle(fc, 1); frG.fillCircle(fx, frY, frR);
+                frG.fillStyle(fc, 0.25); frG.fillCircle(fx, frY, frR);
+                frG.lineStyle(3, fc, 1); frG.strokeCircle(fx, frY, frR);
             } else {
-                frG.lineStyle(2, 0x555577, 1); frG.strokeCircle(fx, frY, frR);
-                frG.fillStyle(0x252540, 1); frG.fillCircle(fx, frY, frR - 1.5);
+                frG.lineStyle(2, 0x44445A, 1); frG.strokeCircle(fx, frY, frR);
+                frG.fillStyle(0x22223A, 1); frG.fillCircle(fx, frY, frR - 1.5);
+                frG.lineStyle(1.5, 0x44445A, 0.5);
+                frG.beginPath(); frG.moveTo(fx - 9, frY - 9); frG.lineTo(fx + 9, frY + 9); frG.strokePath();
+                frG.beginPath(); frG.moveTo(fx + 9, frY - 9); frG.lineTo(fx - 9, frY + 9); frG.strokePath();
             }
             c.add(frG);
 
-            if (!fc) {
-                c.add(this.add.text(fx, frY, '✕', { fontSize: '14px', color: '#555577', resolution: 2 }).setOrigin(0.5));
-            }
+            c.add(this.add.text(fx, frY + frR + 10, _FRAMES[i].label, {
+                fontFamily: 'Outfit', fontSize: '10px', color: fc ? '#AAAACC' : '#555577', resolution: 2,
+            }).setOrigin(0.5));
 
-            const fz = this.add.zone(fx, frY, frCellW - 4, 44).setInteractive({ useHandCursor: true }); c.add(fz);
+            const fz = this.add.zone(fx, frY + 6, frCellW - 2, 56).setInteractive({ useHandCursor: true }); c.add(fz);
             fz.on('pointerdown', () => {
                 this._pFrame = i;
                 try { localStorage.setItem('bbf_frame', i); } catch {}
@@ -330,6 +339,7 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
             });
         }
 
+        // ── _refreshModal: redraws selection indicators ───────
         this._refreshModal = () => {
             this._avSelGfx.forEach((g, i) => {
                 g.clear();
@@ -347,25 +357,20 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
             });
         };
         this._refreshModal();
-
-        // Tap dim to close
-        const dimZone = this.add.zone(cx, H / 2, W, H).setInteractive(); c.add(dimZone);
-        dimZone.on('pointerdown', () => this._closeProfileModal());
-        dimZone.setDepth(-1);
     }
 
     _openProfileModal() {
         const c = this._profileContainer;
         this._redrawBigAv?.();
         this._refreshModal?.();
-        c.setVisible(true).setAlpha(0).setY(24);
-        this.tweens.add({ targets: c, alpha: 1, y: 0, duration: 280, ease: 'Back.easeOut' });
+        c.setVisible(true).setAlpha(0).setY(22);
+        this.tweens.add({ targets: c, alpha: 1, y: 0, duration: 300, ease: 'Back.easeOut' });
     }
 
     _closeProfileModal() {
         const c = this._profileContainer;
         this.tweens.add({
-            targets: c, alpha: 0, y: 18, duration: 180, ease: 'Quad.easeIn',
+            targets: c, alpha: 0, y: 16, duration: 180, ease: 'Quad.easeIn',
             onComplete: () => c.setVisible(false).setY(0),
         });
     }
