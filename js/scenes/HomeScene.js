@@ -105,29 +105,31 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         // ── PLAY button ──────────────────────────────────────────
         const playY = H * 0.73;
         const playW = 280, playH = 70;
-        const pL = cx - playW / 2;
 
-        const playBg = this.add.graphics().setAlpha(0);
+        const playContainer = this.add.container(cx, playY).setAlpha(0);
+
+        const playBg = this.add.graphics();
         playBg.fillStyle(0x5A4DE0, 1);
-        playBg.fillRoundedRect(pL, playY - playH / 2, playW, playH, 20);
+        playBg.fillRoundedRect(-playW / 2, -playH / 2, playW, playH, 20);
         playBg.fillStyle(0x7B6CF6, 1);
-        playBg.fillRoundedRect(pL, playY - playH / 2, playW, playH / 2, { tl: 20, tr: 20, bl: 0, br: 0 });
-        // Shine
+        playBg.fillRoundedRect(-playW / 2, -playH / 2, playW, playH / 2, { tl: 20, tr: 20, bl: 0, br: 0 });
         playBg.fillStyle(0xFFFFFF, 0.14);
-        playBg.fillRoundedRect(pL + 10, playY - playH / 2 + 6, playW - 20, 14, 7);
+        playBg.fillRoundedRect(-playW / 2 + 10, -playH / 2 + 6, playW - 20, 14, 7);
 
-        const playTxt = this.add.text(cx, playY, '▶   PLAY', {
+        const playTxt = this.add.text(0, 0, '▶   PLAY', {
             fontFamily: 'Outfit', fontSize: '28px', fontStyle: 'bold', color: '#FFFFFF',
             shadow: { offsetX: 0, offsetY: 3, color: '#2A1A90', blur: 6, fill: true },
             resolution: 2,
-        }).setOrigin(0.5).setAlpha(0);
+        }).setOrigin(0.5);
 
-        this.tweens.add({ targets: [playBg, playTxt], alpha: 1, duration: 500, delay: 500, ease: 'Quad.easeOut' });
+        playContainer.add([playBg, playTxt]);
+
+        this.tweens.add({ targets: playContainer, alpha: 1, duration: 500, delay: 500, ease: 'Quad.easeOut' });
 
         // Pulse tween (starts after entrance)
         this.time.delayedCall(1100, () => {
             this.tweens.add({
-                targets: [playBg, playTxt],
+                targets: playContainer,
                 scaleX: 1.025, scaleY: 1.025,
                 duration: 850, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
             });
@@ -136,9 +138,9 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         const playZone = this.add.zone(cx, playY, playW, playH).setInteractive({ useHandCursor: true });
         playZone.on('pointerdown', () => {
             window.SoundMgr?.buttonClick();
-            this.tweens.killTweensOf([playBg, playTxt]);
+            this.tweens.killTweensOf(playContainer);
             this.tweens.add({
-                targets: [playBg, playTxt], scaleX: 0.93, scaleY: 0.93,
+                targets: playContainer, scaleX: 0.93, scaleY: 0.93,
                 duration: 80, ease: 'Quad.easeOut',
                 onComplete: () => {
                     this.cameras.main.fadeOut(350, 0, 0, 0);
