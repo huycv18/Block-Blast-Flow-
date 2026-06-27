@@ -666,7 +666,7 @@ window.UIScene = class UIScene extends Phaser.Scene {
         makeSlider(
             pTop + 132, pTop + 156,
             '🎵', 'Nhạc nền',
-            window.SoundMgr?.musicVolume ?? 0.5,
+            window.SoundMgr?.musicVolume ?? 0.7,
             0x7B6CF6,
             (v) => window.SoundMgr?.setMusicVolume(v)
         );

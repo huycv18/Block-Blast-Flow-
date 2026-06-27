@@ -22,7 +22,7 @@ window.SoundManager = class SoundManager {
         // Load saved preferences (volumes: 0.0–1.0 float; 0.5 = old default = 50% of max range)
         try { this._muted = localStorage.getItem('bbf_muted') === '1'; } catch {}
         try { const sv = parseFloat(localStorage.getItem('bbf_sfxvol3'));   this._sfxVol   = isNaN(sv) ? 0.5 : Math.max(0, Math.min(1, sv)); } catch { this._sfxVol   = 0.5; }
-        try { const mv = parseFloat(localStorage.getItem('bbf_musicvol3')); this._musicVol = isNaN(mv) ? 0.5 : Math.max(0, Math.min(1, mv)); } catch { this._musicVol = 0.5; }
+        try { const mv = parseFloat(localStorage.getItem('bbf_musicvol3')); this._musicVol = isNaN(mv) ? 0.7 : Math.max(0, Math.min(1, mv)); } catch { this._musicVol = 0.7; }
 
         this._init();
     }
@@ -40,7 +40,7 @@ window.SoundManager = class SoundManager {
             this.sfxGain.connect(this.masterGain);
             // Music bus
             this.musicGain = this.ctx.createGain();
-            this.musicGain.gain.value = (this._musicVol ?? 0.5) * 0.44; // 0→0  0.5→0.22(old default)  1→0.44
+            this.musicGain.gain.value = (this._musicVol ?? 0.7) * 0.44; // 0→0  0.5→0.22(old default)  1→0.44
             this.musicGain.connect(this.masterGain);
 
             // Browser autoplay policy: AudioContext starts suspended.
