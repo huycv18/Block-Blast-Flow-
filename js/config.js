@@ -36,8 +36,8 @@ window.CONFIG = {
     CONVEYOR_CAPACITY: 80,
     CONVEYOR_SPEED: 0.2,
     CLEANUP_SPEED_MULT: 2,
-    CAR_ABSORB_RADIUS: 55,     // pixel radius around car that pulls cubes off the belt
-    CUBE_ABSORB_DURATION: 380, // ms for cube tween into car (was 200)
+    CAR_ABSORB_RADIUS: 80,     // pixel radius around car that pulls cubes off the belt
+    CUBE_ABSORB_DURATION: 200, // ms for cube tween into car
 
     // --- Warning ---
     CONV_WARNING: 0.75,
@@ -76,11 +76,11 @@ window.CONFIG = {
     CUBE_LINEAR_DAMPING: 0.05,
 
     // --- Animation ---
-    SHAKE_DURATION: 0,
-    SHAKE_INTENSITY: 0,
-    SHAKE_REPEATS: 0,
+    SHAKE_DURATION: 50,
+    SHAKE_INTENSITY: 6,
+    SHAKE_REPEATS: 1,
     LIFT_DURATION: 150,
-    LIFT_DISTANCE: 180,
+    LIFT_DISTANCE: 120,
     BLAST_SCALE_UP: 1.2,
     BLAST_DURATION: 100,
     CUBE_BURST_DELAY: 50,

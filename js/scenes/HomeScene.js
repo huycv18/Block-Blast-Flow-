@@ -18,7 +18,7 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
     create() {
         const W = CONFIG.GAME_WIDTH, H = CONFIG.GAME_HEIGHT, cx = W / 2;
         this.cameras.main.fadeIn(400, 0, 0, 0);
-        window.SoundMgr?.startMusic();
+        window.SoundMgr?.startMusic('home');
         this._readProfile();
 
         // ── Background ───────────────────────────────────────────
@@ -50,8 +50,8 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         );
         this._savedLevel = savedLevel;
         const levelData = LEVELS[savedLevel] || LEVELS[0];
-        const DIFF_COL  = { Tutorial: 0x27AE60, Easy: 0x2980B9, Normal: 0xF39C12, Hard: 0xC0392B };
-        const DIFF_HEX  = { Tutorial: '#2ECC71', Easy: '#3498DB', Normal: '#F1C40F', Hard: '#E74C3C' };
+        const DIFF_COL  = { Tutorial: 0x27AE60, Easy: 0x2980B9, Normal: 0xF39C12, Hard: 0xC0392B, 'Super Hard': 0x8E44AD };
+        const DIFF_HEX  = { Tutorial: '#2ECC71', Easy: '#3498DB', Normal: '#F1C40F', Hard: '#E74C3C', 'Super Hard': '#9B59B6' };
         const dColor = DIFF_COL[levelData.difficulty] || 0x555577;
         const dHex   = DIFF_HEX[levelData.difficulty] || '#AAAACC';
 

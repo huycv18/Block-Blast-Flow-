@@ -102,9 +102,21 @@ window.CubeManager = class CubeManager {
     spawnFromBlock(block) {
         const cubes = [];
 
+        // Apply the container's lift offset so cubes spawn at the block's
+        // current visual position, not the original grid position.
+        let offsetX = 0;
+        let offsetY = 0;
+        if (block.container && block.cells.length > 0) {
+            const fc = block.cells[0];
+            const anchorX = CONFIG.BOARD_OFFSET_X + fc.col * CONFIG.CELL_SIZE + CONFIG.CELL_SIZE / 2;
+            const anchorY = CONFIG.BOARD_OFFSET_Y + fc.row * CONFIG.CELL_SIZE + CONFIG.CELL_SIZE / 2;
+            offsetX = block.container.x - anchorX;
+            offsetY = block.container.y - anchorY;
+        }
+
         for (const cell of block.cells) {
-            const cellX = CONFIG.BOARD_OFFSET_X + cell.col * CONFIG.CELL_SIZE + CONFIG.CELL_DRAW / 2;
-            const cellY = CONFIG.BOARD_OFFSET_Y + cell.row * CONFIG.CELL_SIZE + CONFIG.CELL_DRAW / 2;
+            const cellX = CONFIG.BOARD_OFFSET_X + cell.col * CONFIG.CELL_SIZE + CONFIG.CELL_DRAW / 2 + offsetX;
+            const cellY = CONFIG.BOARD_OFFSET_Y + cell.row * CONFIG.CELL_SIZE + CONFIG.CELL_DRAW / 2 + offsetY;
 
             const cubesPerCell = CONFIG.CUBES_PER_CELL || 4;
             const burstRadius = Math.max(5, CONFIG.CELL_SIZE * 0.22);

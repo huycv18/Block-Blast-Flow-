@@ -11,8 +11,10 @@ window.Conveyor = class Conveyor {
         this.trackGfx = null;
         this.warningOverlay = null;
         this.warningState = 'none'; // 'none' | 'warning' | 'danger'
-        this.beltOffset = 0;
         this.warningTween = null;
+        this.dashGfx = null;
+        this.dashPhase = 0;
+        this.dashSpacing = 0.05; // t-distance between dashes (~20 around the loop)
 
         // Path parameters
         this.cx = CONFIG.CONVEYOR_CENTER_X;
@@ -51,17 +53,30 @@ window.Conveyor = class Conveyor {
         g.fillStyle(0x252535, 1);
         g.fillRoundedRect(x + 6, y + 6, w - 12, h - 12, this.cr - 4);
 
-        // Station markers (small triangles pointing down)
-        for (const station of this.stations) {
-            const pos = this.getPathPosition(station.t);
-            g.fillStyle(THEME.CONTAINER_STROKE, 0.6);
-            g.fillTriangle(pos.x - 4, pos.y - 3, pos.x + 4, pos.y - 3, pos.x, pos.y + 3);
-        }
-
-        // Direction arrows on track
-        this.drawDirectionArrows(g);
+        // Animated moving dashes to sell the belt-running motion
+        const dg = this.scene.add.graphics();
+        dg.setDepth(5.5);
+        this.dashGfx = dg;
+        this.renderBeltDashes();
 
         this._initWarningOverlay();
+    }
+
+    renderBeltDashes() {
+        const g = this.dashGfx;
+        if (!g) return;
+        g.clear();
+        g.lineStyle(3, THEME.CONTAINER_STROKE, 0.5);
+
+        const dashLen = 0.012; // t-length of each dash mark
+        for (let t = this.dashPhase; t < 1; t += this.dashSpacing) {
+            const p1 = this.getPathPosition(t);
+            const p2 = this.getPathPosition(t + dashLen);
+            g.beginPath();
+            g.moveTo(p1.x, p1.y);
+            g.lineTo(p2.x, p2.y);
+            g.strokePath();
+        }
     }
 
     _initWarningOverlay() {
@@ -82,22 +97,6 @@ window.Conveyor = class Conveyor {
             this.hh * 2,
             this.cr
         );
-    }
-
-    drawDirectionArrows(g) {
-        g.lineStyle(1.5, THEME.CONTAINER_STROKE, 0.4);
-
-        // Top: arrows pointing right
-        for (let i = 0; i < 3; i++) {
-            const t = 0.05 + i * 0.12;
-            const pos = this.getPathPosition(t);
-            const pos2 = this.getPathPosition(t + 0.02);
-            const angle = Math.atan2(pos2.y - pos.y, pos2.x - pos.x);
-            g.beginPath();
-            g.moveTo(pos.x - 5 * Math.cos(angle), pos.y - 5 * Math.sin(angle));
-            g.lineTo(pos.x + 5 * Math.cos(angle), pos.y + 5 * Math.sin(angle));
-            g.strokePath();
-        }
     }
 
     getPathMetrics() {
@@ -278,7 +277,8 @@ window.Conveyor = class Conveyor {
             }
         }
 
-        this.beltOffset += speed * 50;
+        this.dashPhase = (this.dashPhase + speed) % this.dashSpacing;
+        this.renderBeltDashes();
         this.updateWarningVisual();
     }
 
@@ -465,6 +465,11 @@ window.Conveyor = class Conveyor {
         if (this.trackGfx) {
             this.trackGfx.destroy();
             this.trackGfx = null;
+        }
+
+        if (this.dashGfx) {
+            this.dashGfx.destroy();
+            this.dashGfx = null;
         }
     }
 };
