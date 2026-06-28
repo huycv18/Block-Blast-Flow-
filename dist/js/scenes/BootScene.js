@@ -45,6 +45,7 @@ window.BootScene = class BootScene extends Phaser.Scene {
         this._generateBoosterBg();
         this._generateStarParticle();
         this._generateCoinIcon();
+        this._generateHeartIcon();
         this._generateSettingsIcon();
     }
 
@@ -222,6 +223,20 @@ window.BootScene = class BootScene extends Phaser.Scene {
         gfx.fillCircle(cx - 2, cy - 2, 2.5);
 
         gfx.generateTexture('coin_icon', size, size);
+        gfx.destroy();
+    }
+
+    // ----------------------------------------------------------
+    // Heart icon — 20x20 red heart shape
+    // ----------------------------------------------------------
+    _generateHeartIcon() {
+        const s = 20;
+        const gfx = this.make.graphics({ add: false });
+        gfx.fillStyle(0xE74C3C, 1);
+        gfx.fillCircle(s * 0.30, s * 0.34, s * 0.24);
+        gfx.fillCircle(s * 0.70, s * 0.34, s * 0.24);
+        gfx.fillTriangle(s * 0.04, s * 0.42, s * 0.96, s * 0.42, s * 0.50, s * 0.90);
+        gfx.generateTexture('heart_icon', s, s);
         gfx.destroy();
     }
 

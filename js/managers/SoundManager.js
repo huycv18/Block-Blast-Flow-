@@ -12,6 +12,7 @@ window.SoundManager = class SoundManager {
 
         this._muted = false;
         this._musicPlaying = false;
+        this._musicTrack = 'game'; // 'home' | 'game'
         this._musicTimer = null;
         this._musicStep = 0;
         this._nextNoteTime = 0;
@@ -280,8 +281,9 @@ window.SoundManager = class SoundManager {
 
     // ── Background Music ─────────────────────────────────────────────────
     //
-    // 126 BPM, 16th-note steps, G-major pentatonic loop.
-    // Marimba melody + chord arpeggio pad + soft rimshot percussion.
+    // Two gentle G-major pentatonic loops, swapped by scene:
+    //  'home' — slow ambient pad + sparse melody, no percussion
+    //  'game' — soft marimba melody + pad + a light shaker, still calm
     //
     // Pentatonic index table (freq in Hz):
     //  0=G2  1=A2  2=B2  3=D3  4=E3
@@ -289,12 +291,18 @@ window.SoundManager = class SoundManager {
     // 10=G4 11=A4 12=B4 13=D5 14=E5
     // 15=G5 16=A5 17=B5 18=D6 19=E6
 
-    startMusic() {
-        if (this._musicPlaying) return;
+    startMusic(track = 'game') {
         if (!this.ctx) return;
+        if (this._musicPlaying) {
+            if (this._musicTrack !== track) {
+                this._musicTrack = track;
+                this._musicStep  = 0; // restart pattern cleanly on track switch
+            }
+            return;
+        }
         if (this.ctx.state !== 'running') {
             const retry = () => {
-                this.ctx.resume().then(() => this.startMusic());
+                this.ctx.resume().then(() => this.startMusic(track));
                 document.removeEventListener('pointerdown', retry);
             };
             document.addEventListener('pointerdown', retry, { once: true, passive: true });
@@ -303,6 +311,7 @@ window.SoundManager = class SoundManager {
         this.musicGain.gain.setValueAtTime(0, this.ctx.currentTime);
         this.musicGain.gain.linearRampToValueAtTime(0.66, this.ctx.currentTime + 2.0);
         this._musicPlaying = true;
+        this._musicTrack   = track;
         this._musicStep    = 0;
         this._nextNoteTime = this.ctx.currentTime + 0.1;
         this._scheduleMusic();
@@ -319,12 +328,54 @@ window.SoundManager = class SoundManager {
         }
     }
 
+    _getMusicPatterns(track) {
+        if (track === 'home') {
+            return {
+                bpm: 100,
+                // Sparse, slow melody — long gaps for a calm ambient feel
+                melody: [
+                    10,-1,-1,-1, -1,-1,-1,-1,  8,-1,-1,-1, -1,-1,-1,-1,
+                    12,-1,-1,-1, -1,-1,-1,-1, 10,-1,-1,-1, -1,-1,-1,-1,
+                ],
+                // Slow sustained pad chords
+                chord: [
+                     5,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
+                     7,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
+                ],
+                // Soft, infrequent bass root
+                bass: [
+                     0,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
+                     3,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
+                ],
+                shaker: null, // no percussion — pure ambient
+            };
+        }
+        // 'game' — a touch more flowing, still gentle
+        return {
+            bpm: 116,
+            melody: [
+                10,-1,12,-1, -1,-1,11,-1, 10,-1,-1,-1,  8,-1,-1,-1,
+                13,-1,12,-1, -1,-1,11,-1, 10,-1,-1,-1, -1,-1,-1,-1,
+            ],
+            chord: [
+                 5,-1,-1,-1,  7,-1,-1,-1,  8,-1,-1,-1,  7,-1,-1,-1,
+                 8,-1,-1,-1,  9,-1,-1,-1,  8,-1,-1,-1,  7,-1,-1,-1,
+            ],
+            bass: [
+                 0,-1,-1,-1, -1,-1,-1,-1,  3,-1,-1,-1, -1,-1,-1,-1,
+                 4,-1,-1,-1, -1,-1,-1,-1,  0,-1,-1,-1, -1,-1,-1,-1,
+            ],
+            // Very soft shaker on the beat only — keeps light momentum, no drums
+            shaker: [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0, 1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
+        };
+    }
+
     _scheduleMusic() {
         if (!this._musicPlaying || !this.ctx) return;
 
         const LOOK_AHEAD = 0.14;
-        const BPM  = 126;
-        const step = 60 / BPM / 4; // 16th note ≈ 0.119 s
+        const pat  = this._getMusicPatterns(this._musicTrack);
+        const step = 60 / pat.bpm / 4; // 16th note
 
         const penta = [
              98.00, 110.00, 123.47, 146.83, 164.81,  // G2..E3 (0-4)
@@ -333,57 +384,30 @@ window.SoundManager = class SoundManager {
             783.99, 880.00, 987.77,1174.66,1318.51,  // G5..E6 (15-19)
         ];
 
-        // 32-step patterns (2 bars @ 126 BPM)
-        // Melody — bouncy marimba feel
-        const melody = [
-            10,-1,12,-1, 13,-1,12,-1, 10,-1,11,-1, 10,-1,-1,-1,
-            13,-1,14,-1, 13,-1,11,-1, 10,-1,12,-1, 10,-1,-1,-1,
-        ];
-        // Chord arpeggio pad — quiet triangle, fills harmony
-        const chord = [
-             5,-1,-1,-1,  7,-1,-1,-1,  8,-1,-1,-1,  7,-1,-1,-1,
-             8,-1,-1,-1,  9,-1,-1,-1,  8,-1,-1,-1,  7,-1,-1,-1,
-        ];
-        // Bass — root notes
-        const bass = [
-             0,-1,-1,-1,  0,-1,-1,-1,  3,-1,-1,-1,  3,-1,-1,-1,
-             4,-1,-1,-1,  4,-1,-1,-1,  0,-1,-1,-1,  0,-1,-1,-1,
-        ];
-        // Light kick on 1 & 3 only
-        const kick  = [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0, 1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0];
-        // Rimshot on 2 & 4
-        const rim   = [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0, 0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0];
-        // Hihat every 8th note
-        const hihat = [1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0, 1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0];
-        const LEN   = melody.length;
+        const { melody, chord, bass, shaker } = pat;
+        const LEN = melody.length;
 
         while (this._nextNoteTime < this.ctx.currentTime + LOOK_AHEAD) {
             const s = this._musicStep % LEN;
             const t = this._nextNoteTime;
 
-            // Melody — short marimba attack (triangle, fast decay)
+            // Melody — soft, gently sustained (triangle)
             if (melody[s] >= 0) {
-                this._mNote(penta[melody[s]], 0.075, t, step * 0.55, 'triangle');
+                this._mNote(penta[melody[s]], 0.06, t, step * 1.4, 'triangle');
             }
 
-            // Chord arpeggio pad (sine, long, very quiet)
+            // Chord pad (sine, long sustain, very quiet)
             if (chord[s] >= 0) {
-                this._mNote(penta[chord[s]], 0.038, t, step * 3.8, 'sine');
+                this._mNote(penta[chord[s]], 0.034, t, step * 4.2, 'sine');
             }
 
-            // Bass (sine, quarter-note)
+            // Bass (sine, soft and long)
             if (bass[s] >= 0) {
-                this._mNote(penta[bass[s]] * 0.5, 0.16, t, step * 3.5, 'sine');
+                this._mNote(penta[bass[s]] * 0.5, 0.13, t, step * 3.6, 'sine');
             }
 
-            // Kick (softer thump)
-            if (kick[s]) this._mKick(t);
-
-            // Rimshot instead of snare
-            if (rim[s]) this._mNoise(t, 0.038, 0.055, 'bandpass', 2400, 3.0);
-
-            // Hi-hat
-            if (hihat[s]) this._mHat(t);
+            // Light shaker — only present on the 'game' track
+            if (shaker && shaker[s]) this._mHat(t);
 
             this._musicStep++;
             this._nextNoteTime += step;
@@ -404,34 +428,9 @@ window.SoundManager = class SoundManager {
         osc.start(t); osc.stop(t + dur + 0.01);
     }
 
-    _mKick(t) {
-        const osc = this.ctx.createOscillator();
-        const g   = this.ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(160, t);
-        osc.frequency.exponentialRampToValueAtTime(42, t + 0.09);
-        g.gain.setValueAtTime(0.4, t);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
-        osc.connect(g); g.connect(this.musicGain);
-        osc.start(t); osc.stop(t + 0.15);
-    }
-
-    _mSnare(t) {
-        // Noise component
-        this._mNoise(t, 0.055, 0.14, 'bandpass', 1100, 1.8);
-        // Tone snap
-        const osc = this.ctx.createOscillator();
-        const g   = this.ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.value = 220;
-        g.gain.setValueAtTime(0.08, t);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.055);
-        osc.connect(g); g.connect(this.musicGain);
-        osc.start(t); osc.stop(t + 0.06);
-    }
-
     _mHat(t) {
-        this._mNoise(t, 0.028, 0.038, 'highpass', 8000, 1);
+        // Soft shaker tick — quieter than a real hi-hat to stay gentle
+        this._mNoise(t, 0.016, 0.05, 'highpass', 7000, 1);
     }
 
     _mNoise(t, gain, dur, filterType, filterFreq, Q) {

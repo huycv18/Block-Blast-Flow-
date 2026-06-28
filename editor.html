@@ -12,6 +12,8 @@
         <header id="editor-header">
             <h1>🧩 Block Blast Flow! — Level Editor</h1>
             <div class="header-actions">
+                <button class="btn btn-outline btn-sm" id="btn-undo" title="Undo (Ctrl+Z)">↶ Undo</button>
+                <button class="btn btn-outline btn-sm" id="btn-redo" title="Redo (Ctrl+Y)">↷ Redo</button>
                 <button class="btn btn-outline btn-sm" id="btn-new">✨ New Level</button>
                 <button class="btn btn-outline btn-sm" id="btn-import">📂 Import</button>
                 <button class="btn btn-primary btn-sm" id="btn-export">💾 Export JSON</button>
@@ -26,9 +28,9 @@
                 <div class="panel-section">
                     <div class="panel-section-title">Tools</div>
                     <div class="tool-group" id="tool-buttons">
-                        <button class="tool-btn active" data-tool="draw"><span class="icon">✏️</span> Draw</button>
-                        <button class="tool-btn" data-tool="erase"><span class="icon">🧹</span> Erase</button>
-                        <button class="tool-btn" data-tool="select"><span class="icon">👆</span> Select</button>
+                        <button class="tool-btn active" data-tool="draw" title="Draw (B)"><span class="icon">✏️</span> Draw <span class="tool-key">B</span></button>
+                        <button class="tool-btn" data-tool="erase" title="Erase (D)"><span class="icon">🧹</span> Erase <span class="tool-key">D</span></button>
+                        <button class="tool-btn" data-tool="select" title="Select (V)"><span class="icon">👆</span> Select <span class="tool-key">V</span></button>
                     </div>
                 </div>
 
@@ -41,7 +43,7 @@
                 <!-- Shapes -->
                 <div class="panel-section">
                     <div class="panel-section-title">Shape</div>
-                    <div class="shape-grid" id="shape-grid"></div>
+                    <div class="shape-grid scroll-box" id="shape-grid"></div>
                 </div>
 
                 <!-- Block Properties -->
@@ -49,16 +51,7 @@
                     <div class="panel-section-title">Block Properties</div>
                     <div class="frozen-editor-box block-props-panel">
                         <div class="frozen-editor-hint" id="frozen-selected-label">Select a block to edit properties.</div>
-                        <div class="key-lock-row">
-                            <label>
-                                <span>Color</span>
-                                <select id="select-block-color"></select>
-                            </label>
-                            <label>
-                                <span>Shape</span>
-                                <select id="select-block-shape"></select>
-                            </label>
-                        </div>
+                        <div class="frozen-editor-note">Tip: with a block selected, click a swatch in Color or a tile in Shape above to apply it instantly.</div>
                         <div class="key-lock-row">
                             <label>
                                 <span>Layer</span>
@@ -119,6 +112,7 @@
                                 <option value="Easy">Easy</option>
                                 <option value="Normal">Normal</option>
                                 <option value="Hard">Hard</option>
+                                <option value="Super Hard">Super Hard</option>
                             </select>
                         </div>
                     </div>
@@ -178,7 +172,8 @@
                             <button class="btn btn-outline" id="btn-gen-levelsjs">📄 Export levels.js</button>
                         </div>
                     </div>
-                    <div id="bank-list" style="margin-top:10px;"></div>
+                    <input type="text" id="bank-search" class="search-input" style="margin-top:10px" placeholder="🔍 Search by name, ID or difficulty…">
+                    <div id="bank-list" class="scroll-box"></div>
                 </div>
 
                 <!-- Actions -->

@@ -44,6 +44,13 @@
             this.dragPreview = null;
             this.suppressNextClick = false;
             this.hiddenLayers = new Set();
+            this.bankFilterText = '';
+
+            // Undo/redo history (JSON snapshots of levelData)
+            this.history = [];
+            this.future = [];
+            this.HISTORY_LIMIT = 40;
+            this.dirty = false;
 
             // Level data
             this.levelData = this.createNewLevel();
@@ -57,7 +64,118 @@
             this.initUI();
             this.initCanvasEvents();
             this.initButtonEvents();
+            this.initKeyboardShortcuts();
+            this.initUnsavedWarning();
             this.renderAll();
+        }
+
+        // ───────────────────────────────────────
+        // Undo / Redo history
+        // ───────────────────────────────────────
+
+        snapshotState() {
+            return JSON.stringify(this.levelData);
+        }
+
+        restoreState(json) {
+            this.levelData = JSON.parse(json);
+        }
+
+        /** Run `mutateFn` (returns truthy on success); on success, push a pre-mutation snapshot to history. */
+        withHistory(mutateFn) {
+            const snapshot = this.snapshotState();
+            const result = mutateFn();
+            if (result) {
+                this.history.push(snapshot);
+                if (this.history.length > this.HISTORY_LIMIT) this.history.shift();
+                this.future = [];
+                this.dirty = true;
+            }
+            return result;
+        }
+
+        afterHistoryRestore() {
+            this.selectedBlockId = null;
+            this.draggedBlockId = null;
+            if (!this.levelData.layers.some(l => l.index === this.activeLayer)) {
+                this.activeLayer = this.levelData.layers[0] ? this.levelData.layers[0].index : 0;
+            }
+            this.hiddenLayers.clear();
+            this.syncSettingsToUI();
+            this.renderCarsConfig();
+            this.refreshBlockLayerSelect();
+            this.renderAll();
+        }
+
+        undo() {
+            if (this.history.length === 0) {
+                this.showToast('Nothing to undo', true);
+                return;
+            }
+            this.future.push(this.snapshotState());
+            this.restoreState(this.history.pop());
+            this.afterHistoryRestore();
+            this.showToast('Undo');
+        }
+
+        redo() {
+            if (this.future.length === 0) {
+                this.showToast('Nothing to redo', true);
+                return;
+            }
+            this.history.push(this.snapshotState());
+            this.restoreState(this.future.pop());
+            this.afterHistoryRestore();
+            this.showToast('Redo');
+        }
+
+        initKeyboardShortcuts() {
+            document.addEventListener('keydown', (e) => {
+                const tag = document.activeElement && document.activeElement.tagName;
+                const inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+                if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+                    e.preventDefault();
+                    this.undo();
+                    return;
+                }
+                if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
+                    e.preventDefault();
+                    this.redo();
+                    return;
+                }
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                    e.preventDefault();
+                    this.saveToBank();
+                    return;
+                }
+                if (!inField && (e.key === 'Delete' || e.key === 'Backspace') && this.selectedBlockId) {
+                    e.preventDefault();
+                    const record = this.getSelectedBlockRecord();
+                    if (record && this.withHistory(() => this.eraseBlockAt(record.block.row, record.block.col))) {
+                        this.renderAll();
+                        this.showToast('Block deleted');
+                    }
+                    return;
+                }
+
+                if (inField || e.ctrlKey || e.metaKey || e.altKey) return;
+
+                const TOOL_KEYS = { b: 'draw', d: 'erase', v: 'select' };
+                const tool = TOOL_KEYS[e.key.toLowerCase()];
+                if (tool) {
+                    e.preventDefault();
+                    this.selectTool(tool);
+                }
+            });
+        }
+
+        initUnsavedWarning() {
+            window.addEventListener('beforeunload', (e) => {
+                if (!this.dirty) return;
+                e.preventDefault();
+                e.returnValue = '';
+            });
         }
 
         // ───────────────────────────────────────
@@ -594,8 +712,6 @@
             this.refreshBlockLayerSelect();
 
             const label = document.getElementById('frozen-selected-label');
-            const colorSelect = document.getElementById('select-block-color');
-            const shapeSelect = document.getElementById('select-block-shape');
             const layerSelect = document.getElementById('select-block-layer');
             const input = document.getElementById('input-frozen-count');
             const applyBtn = document.getElementById('btn-apply-frozen');
@@ -610,8 +726,6 @@
             const record = this.getSelectedBlockRecord();
             const hasSelection = !!record;
 
-            if (colorSelect) colorSelect.disabled = !hasSelection;
-            if (shapeSelect) shapeSelect.disabled = !hasSelection;
             if (layerSelect) layerSelect.disabled = !hasSelection;
             input.disabled = !hasSelection;
             applyBtn.disabled = !hasSelection;
@@ -622,8 +736,6 @@
 
             if (!record) {
                 label.textContent = 'Select a block to edit properties.';
-                if (colorSelect) colorSelect.value = '';
-                if (shapeSelect) shapeSelect.value = '';
                 if (layerSelect) layerSelect.value = '';
                 input.value = '0';
                 keySelect.value = '';
@@ -634,8 +746,6 @@
 
             const count = Math.max(0, parseInt(record.block.frozenCount || 0, 10) || 0);
             label.textContent = `Selected ${record.block.id} on L${record.layerIndex}`;
-            if (colorSelect) colorSelect.value = record.block.color || '';
-            if (shapeSelect) shapeSelect.value = record.block.shape || '';
             if (layerSelect) layerSelect.value = String(record.layerIndex);
             input.value = String(count);
             keySelect.value = record.block.keyColor || '';
@@ -708,34 +818,17 @@
             this.renderLayers();
             this.renderCarsConfig();
             this.renderValidation();
+
+            const bankSearch = document.getElementById('bank-search');
+            if (bankSearch) {
+                bankSearch.addEventListener('input', () => {
+                    this.bankFilterText = bankSearch.value;
+                    this.renderBankList();
+                });
+            }
         }
 
         buildBlockPropertySelects() {
-            const colorSelect = document.getElementById('select-block-color');
-            const shapeSelect = document.getElementById('select-block-shape');
-
-            if (colorSelect) {
-                colorSelect.innerHTML = '';
-
-                for (const color of COLOR_NAMES) {
-                    const option = document.createElement('option');
-                    option.value = color;
-                    option.textContent = color;
-                    colorSelect.appendChild(option);
-                }
-            }
-
-            if (shapeSelect) {
-                shapeSelect.innerHTML = '';
-
-                for (const shapeName of Object.keys(SHAPES)) {
-                    const option = document.createElement('option');
-                    option.value = shapeName;
-                    option.textContent = shapeName;
-                    shapeSelect.appendChild(option);
-                }
-            }
-
             this.refreshBlockLayerSelect();
         }
 
@@ -793,6 +886,10 @@
                 el.title = name;
                 el.innerHTML = `<span class="color-label">${name}</span>`;
                 el.addEventListener('click', () => {
+                    if (this.selectedBlockId) {
+                        this.withHistory(() => this.setSelectedBlockColor(name));
+                        return;
+                    }
                     this.selectedColor = name;
                     container.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
                     el.classList.add('active');
@@ -806,6 +903,7 @@
         buildShapeGrid() {
             const container = document.getElementById('shape-grid');
             container.innerHTML = '';
+
             for (const [key, shape] of Object.entries(SHAPES)) {
                 const el = document.createElement('div');
                 el.className = 'shape-item' + (key === this.selectedShape ? ' active' : '');
@@ -834,6 +932,10 @@
                 el.appendChild(nameEl);
 
                 el.addEventListener('click', () => {
+                    if (this.selectedBlockId) {
+                        this.withHistory(() => this.setSelectedBlockShape(key));
+                        return;
+                    }
                     this.selectedShape = key;
                     container.querySelectorAll('.shape-item').forEach(s => s.classList.remove('active'));
                     el.classList.add('active');
@@ -1125,6 +1227,19 @@
                 text.textContent = `${color}: ${cubes} cubes ${pass ? '=' : '≠'} ${cap} car cap`;
                 row.appendChild(text);
 
+                if (!pass) {
+                    const hasCar = this.levelData.cars.some(c => c.color === color);
+                    const fixBtn = document.createElement('button');
+                    fixBtn.className = 'v-fix-btn';
+                    fixBtn.textContent = hasCar ? 'Fix' : 'No car';
+                    fixBtn.disabled = !hasCar;
+                    fixBtn.title = hasCar
+                        ? `Set ${color} car capacity to match ${cubes} cubes`
+                        : `Add a ${color} car first`;
+                    fixBtn.addEventListener('click', () => this.quickFixColorBalance(color, cubes));
+                    row.appendChild(fixBtn);
+                }
+
                 container.appendChild(row);
             }
 
@@ -1154,6 +1269,29 @@
             // Update status dot
             const dot = document.getElementById('status-dot');
             dot.className = 'status-dot' + (allPass && allColors.size > 0 ? '' : ' error');
+        }
+
+        /** Redistribute total cube count across the existing cars of `color` so capacity matches exactly. */
+        quickFixColorBalance(color, cubes) {
+            const cars = this.levelData.cars.filter(c => c.color === color);
+            if (cars.length === 0) {
+                this.showToast(`No ${color} car to balance — add one first`, true);
+                return;
+            }
+
+            this.withHistory(() => {
+                const base = Math.floor(cubes / cars.length);
+                let remainder = cubes - base * cars.length;
+                for (const car of cars) {
+                    car.capacity = base + (remainder > 0 ? 1 : 0);
+                    if (remainder > 0) remainder--;
+                }
+                return true;
+            });
+
+            this.renderCarsConfig();
+            this.renderValidation();
+            this.showToast(`${color} car capacity set to match ${cubes} cubes`);
         }
 
         // ───────────────────────────────────────
@@ -1511,6 +1649,7 @@
         }
 
         beginBlockDrag(block, layerIndex, cell) {
+            this._dragHistorySnapshot = this.snapshotState();
             this.selectedBlockId = block.id;
             this.activeLayer = layerIndex;
             this.selectedColor = block.color;
@@ -1570,11 +1709,18 @@
             if (moved) {
                 record.block.row = preview.row;
                 record.block.col = preview.col;
+                if (this._dragHistorySnapshot) {
+                    this.history.push(this._dragHistorySnapshot);
+                    if (this.history.length > this.HISTORY_LIMIT) this.history.shift();
+                    this.future = [];
+                    this.dirty = true;
+                }
                 this.showToast(`${record.block.id} moved to ${preview.row}, ${preview.col}`);
             } else if (preview && !preview.valid) {
                 this.showToast('Cannot move block there', true);
             }
 
+            this._dragHistorySnapshot = null;
             this.draggedBlockId = null;
             this.dragStartCell = null;
             this.dragStartPosition = null;
@@ -1638,12 +1784,12 @@
                 const { row, col } = this.hoverCell;
 
                 if (this.tool === 'draw') {
-                    if (this.placeBlock(row, col)) {
+                    if (this.withHistory(() => this.placeBlock(row, col))) {
                         this.renderAll();
                         this.showToast(`Placed ${this.selectedShape} (${this.selectedColor})`);
                     }
                 } else if (this.tool === 'erase') {
-                    if (this.eraseBlockAt(row, col)) {
+                    if (this.withHistory(() => this.eraseBlockAt(row, col))) {
                         this.renderAll();
                         this.showToast('Block erased');
                     }
@@ -1670,7 +1816,7 @@
             this.canvas.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
                 if (!this.hoverCell) return;
-                if (this.eraseBlockAt(this.hoverCell.row, this.hoverCell.col)) {
+                if (this.withHistory(() => this.eraseBlockAt(this.hoverCell.row, this.hoverCell.col))) {
                     this.renderAll();
                     this.showToast('Block erased');
                 }
@@ -1681,17 +1827,20 @@
         // Button Events
         // ───────────────────────────────────────
 
+        selectTool(tool) {
+            this.selectedBlockId = null;
+            this.setActiveTool(tool);
+            this.updateStatusBar();
+            this.updateFrozenPanel();
+            this.renderGrid();
+        }
+
         initButtonEvents() {
             // Tool buttons
             document.getElementById('tool-buttons').addEventListener('click', (e) => {
                 const btn = e.target.closest('.tool-btn');
                 if (!btn) return;
-                const nextTool = btn.dataset.tool;
-                this.selectedBlockId = null;
-                this.setActiveTool(nextTool);
-                this.updateStatusBar();
-                this.updateFrozenPanel();
-                this.renderGrid();
+                this.selectTool(btn.dataset.tool);
             });
 
             // Add layer
@@ -1728,14 +1877,6 @@
             syncInput('input-booster-shuffle', 'boosters.shuffle');
             syncInput('input-booster-paint', 'boosters.paintGun');
 
-            document.getElementById('select-block-color').addEventListener('change', (e) => {
-                this.setSelectedBlockColor(e.target.value);
-            });
-
-            document.getElementById('select-block-shape').addEventListener('change', (e) => {
-                this.setSelectedBlockShape(e.target.value);
-            });
-
             document.getElementById('select-block-layer').addEventListener('change', (e) => {
                 this.setSelectedBlockLayer(e.target.value);
             });
@@ -1759,10 +1900,13 @@
             });
 
             document.getElementById('btn-rotate-block').addEventListener('click', () => {
-                this.rotateSelectedBlock();
+                this.withHistory(() => this.rotateSelectedBlock());
             });
 
             // Header buttons
+            document.getElementById('btn-undo').addEventListener('click', () => this.undo());
+            document.getElementById('btn-redo').addEventListener('click', () => this.redo());
+
             document.getElementById('btn-new').addEventListener('click', () => {
                 if (!confirm('Create new level? Current data will be lost.')) return;
                 this.levelData = this.createNewLevel();
@@ -1770,6 +1914,9 @@
                 this.blockIdCounter = 1;
                 this.selectedBlockId = null;
                 this.hiddenLayers.clear();
+                this.history = [];
+                this.future = [];
+                this.dirty = false;
                 this.syncSettingsToUI();
                 this.renderCarsConfig();
                 this.renderAll();
@@ -1806,11 +1953,14 @@
 
             document.getElementById('btn-clear').addEventListener('click', () => {
                 if (!confirm('Clear all blocks?')) return;
-                for (const layer of this.levelData.layers) {
-                    layer.blocks = [];
-                }
-                this.selectedBlockId = null;
-                this.blockIdCounter = 1;
+                this.withHistory(() => {
+                    for (const layer of this.levelData.layers) {
+                        layer.blocks = [];
+                    }
+                    this.selectedBlockId = null;
+                    this.blockIdCounter = 1;
+                    return true;
+                });
                 this.renderAll();
                 this.showToast('All blocks cleared');
             });
@@ -1965,6 +2115,9 @@
 
             this.levelData = data;
             this.hiddenLayers.clear();
+            this.history = [];
+            this.future = [];
+            this.dirty = false;
             this.levelData.conveyorCapacity ??= CONFIG.CONVEYOR_CAPACITY;
             this.levelData.funnelCapacity ??= CONFIG.FUNNEL_CAPACITY;
             this.levelData.boosters ??= { magnet: 10, shuffle: 10, paintGun: 10 };
@@ -2124,6 +2277,7 @@
 
             bank.sort((a, b) => a.id - b.id);
             this.saveLevelBank(bank);
+            this.dirty = false;
             this.renderBankList();
         }
 
@@ -2181,11 +2335,23 @@
             container.innerHTML = '';
 
             if (bank.length === 0) {
-                container.innerHTML = '<div style="font-size:12px;color:#666;">No saved levels yet. Use "💾 Save to Bank" to add levels.</div>';
+                container.innerHTML = '<div class="scroll-box-empty">No saved levels yet. Use "💾 Save to Bank" to add levels.</div>';
                 return;
             }
 
-            for (const level of bank) {
+            const q = (this.bankFilterText || '').trim().toLowerCase();
+            const filtered = !q ? bank : bank.filter(level =>
+                String(level.id).includes(q) ||
+                (level.name || '').toLowerCase().includes(q) ||
+                (level.difficulty || '').toLowerCase().includes(q)
+            );
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="scroll-box-empty">No levels match your search.</div>';
+                return;
+            }
+
+            for (const level of filtered) {
                 const totalBlocks = level.layers.reduce((sum, l) => sum + l.blocks.length, 0);
                 const el = document.createElement('div');
                 el.className = 'bank-item';
@@ -2195,6 +2361,7 @@
                     <span class="bank-meta">${totalBlocks}blk ${level.difficulty || ''}</span>
                     <span class="bank-play" data-id="${level.id}" title="Play Test">▶</span>
                     <span class="bank-load" data-id="${level.id}" title="Load">📂</span>
+                    <span class="bank-duplicate" data-id="${level.id}" title="Duplicate">⧉</span>
                     <span class="bank-delete" data-id="${level.id}" title="Delete">✕</span>
                 `;
                 container.appendChild(el);
@@ -2203,17 +2370,38 @@
             container.onclick = (e) => {
                 const playBtn = e.target.closest('.bank-play');
                 const loadBtn = e.target.closest('.bank-load');
+                const dupBtn = e.target.closest('.bank-duplicate');
                 const delBtn = e.target.closest('.bank-delete');
                 if (playBtn) {
                     this.playTestForLevel(parseInt(playBtn.dataset.id));
                 } else if (loadBtn) {
                     this.loadFromBank(parseInt(loadBtn.dataset.id));
+                } else if (dupBtn) {
+                    this.duplicateInBank(parseInt(dupBtn.dataset.id));
                 } else if (delBtn) {
                     if (confirm('Delete this level from bank?')) {
                         this.deleteFromBank(parseInt(delBtn.dataset.id));
                     }
                 }
             };
+        }
+
+        duplicateInBank(levelId) {
+            const bank = this.getLevelBank();
+            const source = bank.find(l => l.id === levelId);
+            if (!source) {
+                this.showToast('Level not found in Bank', true);
+                return;
+            }
+            const newId = Math.max(...bank.map(l => l.id), 0) + 1;
+            const copy = JSON.parse(JSON.stringify(source));
+            copy.id = newId;
+            copy.name = `${copy.name || 'Untitled'} (copy)`;
+            bank.push(copy);
+            bank.sort((a, b) => a.id - b.id);
+            this.saveLevelBank(bank);
+            this.renderBankList();
+            this.showToast(`Duplicated as Level ${newId}`);
         }
 
         playTestForLevel(levelId) {

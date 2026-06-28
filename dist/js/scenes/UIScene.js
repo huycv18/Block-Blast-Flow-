@@ -479,7 +479,7 @@ window.UIScene = class UIScene extends Phaser.Scene {
     createSettingsModal() {
         const cx = CONFIG.GAME_WIDTH / 2;
         const cy = CONFIG.GAME_HEIGHT / 2;
-        const pw = 292, ph = 316;
+        const pw = 292, ph = 380;
         const pLeft = cx - pw / 2, pTop = cy - ph / 2;
 
         const container = this.add.container(0, 0).setDepth(600).setVisible(false);
@@ -683,15 +683,15 @@ window.UIScene = class UIScene extends Phaser.Scene {
         addDivider(pTop + 240);
 
         // ── Restart button ───────────────────────────────────────────
-        const btnY = pTop + 278;
+        const btnY = pTop + 274;
         const restartBg = this.add.graphics();
         restartBg.fillStyle(0xE67E22, 1);
-        restartBg.fillRoundedRect(cx - 100, btnY - 22, 200, 44, 12);
+        restartBg.fillRoundedRect(cx - 100, btnY - 20, 200, 40, 12);
         const restartText = this.add.text(cx, btnY, '🔄  Chơi lại màn này', {
             fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold',
             color: '#FFFFFF', resolution: 2,
         }).setOrigin(0.5);
-        const restartZone = this.add.zone(cx, btnY, 200, 44).setInteractive({ useHandCursor: true });
+        const restartZone = this.add.zone(cx, btnY, 200, 40).setInteractive({ useHandCursor: true });
         restartZone.on('pointerdown', () => {
             window.SoundMgr?.buttonClick();
             this._closeModal(container, () => this.gameScene.retryLevel());
@@ -700,6 +700,28 @@ window.UIScene = class UIScene extends Phaser.Scene {
         container.add(restartBg);
         container.add(restartText);
         container.add(restartZone);
+
+        // ── Exit to Home button ──────────────────────────────────────
+        const homeY = pTop + 330;
+        const homeBg = this.add.graphics();
+        homeBg.fillStyle(0xC0392B, 1);
+        homeBg.fillRoundedRect(cx - 100, homeY - 20, 200, 40, 12);
+        const homeText = this.add.text(cx, homeY, '🏠  Về màn hình chính', {
+            fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold',
+            color: '#FFFFFF', resolution: 2,
+        }).setOrigin(0.5);
+        const homeZone = this.add.zone(cx, homeY, 200, 40).setInteractive({ useHandCursor: true });
+        homeZone.on('pointerdown', () => {
+            window.SoundMgr?.buttonClick();
+            this._closeModal(container, () => {
+                this.scene.stop('UIScene');
+                this.gameScene.scene.start('HomeScene');
+            });
+        });
+        this._addBtnPress(homeZone, [homeBg, homeText]);
+        container.add(homeBg);
+        container.add(homeText);
+        container.add(homeZone);
 
         this.settingsModal = { container };
     }

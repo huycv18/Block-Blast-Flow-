@@ -107,7 +107,7 @@ window.GameScene = class GameScene extends Phaser.Scene {
         this.matter.world.on('collisionstart', this._cubeCollisionHandler);
 
         // Start audio (resume context on first interaction, then start music)
-        window.SoundMgr?.startMusic();
+        window.SoundMgr?.startMusic('game');
 
         // Save progress and start playing
         try { localStorage.setItem('bbf_currentLevel', this.currentLevel); } catch {}
@@ -219,16 +219,19 @@ window.GameScene = class GameScene extends Phaser.Scene {
         if (block.state === 'covered') return;
 
         if (block.isLocked) {
+            this._maybeTutorial('key_lock', 'Phá Block "Key" cùng màu để mở khoá Block "Lock" này!', block);
             await block.shakeLocked();
             return;
         }
 
         if (block.isFrozen && block.isFrozen()) {
+            this._maybeTutorial('frozen_block', 'Block đóng băng cần bị phá vài lần trước khi rút ra được.', block);
             await block.shakeFrozen();
             return;
         }
 
         if (block.state === 'blocked') {
+            this._maybeTutorial('layer_block', 'Block bị Layer trên che sẽ chặn lại — hãy giải phóng Layer trên trước!', block);
             await block.shakeBlocked();
             return;
         }
@@ -279,6 +282,27 @@ window.GameScene = class GameScene extends Phaser.Scene {
         if (this.board) this.board.setXRayMode(isOn);
     }
 
+    /** Bounding screen rect (in CELL_SIZE units) covering all of a block's cells. */
+    _blockScreenRect(block) {
+        const rows = block.cells.map(c => c.row);
+        const cols = block.cells.map(c => c.col);
+        const minR = Math.min(...rows), maxR = Math.max(...rows);
+        const minC = Math.min(...cols), maxC = Math.max(...cols);
+        return {
+            x: CONFIG.BOARD_OFFSET_X + minC * CONFIG.CELL_SIZE,
+            y: CONFIG.BOARD_OFFSET_Y + minR * CONFIG.CELL_SIZE,
+            w: (maxC - minC + 1) * CONFIG.CELL_SIZE,
+            h: (maxR - minR + 1) * CONFIG.CELL_SIZE,
+        };
+    }
+
+    /** Show a first-encounter hint overlay (UIScene) for a block-related mechanic, if not seen yet. */
+    _maybeTutorial(key, text, block) {
+        const ui = this.scene.get('UIScene');
+        if (!ui || !ui.showTutorial) return;
+        ui.showTutorial(key, { text, rect: this._blockScreenRect(block) });
+    }
+
     resolvePostBoardChange() {
         if (!this.gameState ||
             this.gameState.getState() === 'WIN' ||
@@ -309,10 +333,26 @@ window.GameScene = class GameScene extends Phaser.Scene {
         return { row, col };
     }
 
+    pauseGame() {
+        if (!this.gameState.pause()) return false;
+        this.tweens.pauseAll();
+        this.time.paused = true;
+        if (this.matter?.world) this.matter.world.enabled = false;
+        return true;
+    }
+
+    resumeGame() {
+        if (!this.gameState.resume()) return false;
+        this.tweens.resumeAll();
+        this.time.paused = false;
+        if (this.matter?.world) this.matter.world.enabled = true;
+        return true;
+    }
+
     update(time, delta) {
         const state = this.gameState.getState();
 
-        if (state === 'WIN' || state === 'IDLE') return;
+        if (state === 'WIN' || state === 'IDLE' || state === 'PAUSED') return;
 
         // Update systems (conveyor keeps running even on LOSE so player can watch)
         if (this.cubeManager) this.cubeManager.update();
