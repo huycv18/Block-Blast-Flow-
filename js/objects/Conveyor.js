@@ -16,6 +16,12 @@ window.Conveyor = class Conveyor {
         this.dashPhase = 0;
         this.dashSpacing = 0.05; // t-distance between dashes (~20 around the loop)
 
+        // Cleanup speed-boost visual (blue glow + energy sparks) — active while speedMultiplier > 1
+        this._boosting = false;
+        this.boostGfx = null;
+        this.boostTween = null;
+        this._boostSparkTimer = null;
+
         // Path parameters
         this.cx = CONFIG.CONVEYOR_CENTER_X;
         this.cy = CONFIG.CONVEYOR_CENTER_Y;
@@ -66,9 +72,15 @@ window.Conveyor = class Conveyor {
         const g = this.dashGfx;
         if (!g) return;
         g.clear();
-        g.lineStyle(3, THEME.CONTAINER_STROKE, 0.5);
 
-        const dashLen = 0.012; // t-length of each dash mark
+        if (this._boosting) {
+            // Streaking cyan-blue light trails — sells the "supercharged" cleanup speed
+            g.lineStyle(4, 0x29D7FF, 0.9);
+        } else {
+            g.lineStyle(3, THEME.CONTAINER_STROKE, 0.5);
+        }
+
+        const dashLen = this._boosting ? 0.022 : 0.012; // t-length of each dash mark (longer streaks when boosting)
         for (let t = this.dashPhase; t < 1; t += this.dashSpacing) {
             const p1 = this.getPathPosition(t);
             const p2 = this.getPathPosition(t + dashLen);
@@ -413,6 +425,81 @@ window.Conveyor = class Conveyor {
 
     setSpeedMultiplier(mult) {
         this.speedMultiplier = mult;
+
+        const boosting = mult > 1;
+        if (boosting === this._boosting) return;
+        this._boosting = boosting;
+        if (boosting) this._startCleanupBoost();
+        else this._stopCleanupBoost();
+    }
+
+    // ── Cleanup speed-boost visual ──────────────────────────────────────
+    // Triggered when the conveyor accelerates to sweep remaining cubes into
+    // cars (CLEANUP state) — a strong blue glow + energy sparks to make the
+    // payoff moment feel powerful, not just "faster".
+
+    _startCleanupBoost() {
+        if (!this.boostGfx) {
+            this.boostGfx = this.scene.add.graphics();
+            this.boostGfx.setDepth(5.6);
+        }
+        this._drawBoostGlow();
+
+        this.scene.tweens.killTweensOf(this.boostGfx);
+        this.boostGfx.setAlpha(0.35);
+        this.boostTween = this.scene.tweens.add({
+            targets: this.boostGfx,
+            alpha: { from: 0.35, to: 0.95 },
+            duration: 260,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut',
+        });
+
+        if (this._boostSparkTimer) this._boostSparkTimer.remove();
+        this._boostSparkTimer = this.scene.time.addEvent({
+            delay: 110, loop: true, callback: () => this._spawnBoostSpark(),
+        });
+    }
+
+    _stopCleanupBoost() {
+        if (this.boostTween) { this.boostTween.stop(); this.boostTween = null; }
+        if (this.boostGfx) { this.boostGfx.clear(); this.boostGfx.setAlpha(0); }
+        if (this._boostSparkTimer) { this._boostSparkTimer.remove(); this._boostSparkTimer = null; }
+    }
+
+    _drawBoostGlow() {
+        const g = this.boostGfx;
+        g.clear();
+        const x = this.cx - this.hw, y = this.cy - this.hh;
+        const w = this.hw * 2, h = this.hh * 2;
+
+        // Layered strokes (wide+faint → tight+bright) fake a soft glow with plain Graphics
+        const layers = [
+            { pad: 10, width: 6, alpha: 0.18 },
+            { pad: 5,  width: 5, alpha: 0.35 },
+            { pad: 0,  width: 4, alpha: 0.9 },
+        ];
+        for (const L of layers) {
+            g.lineStyle(L.width, 0x29D7FF, L.alpha);
+            g.strokeRoundedRect(x - L.pad, y - L.pad, w + L.pad * 2, h + L.pad * 2, this.cr + L.pad);
+        }
+    }
+
+    _spawnBoostSpark() {
+        if (!this.scene || !this.scene.add) return;
+        const pos = this.getPathPosition(Math.random());
+        const e = this.scene.add.particles(pos.x, pos.y, 'particle_star', {
+            speed: { min: 60, max: 170 },
+            angle: { min: 0, max: 360 },
+            scale: { start: 0.9, end: 0 },
+            lifespan: 280,
+            quantity: 3,
+            tint: [0x29D7FF, 0x7FE8FF, 0xFFFFFF],
+        });
+        e.setDepth(5.7);
+        this.scene.time.delayedCall(60, () => { if (e && e.stop) e.stop(); });
+        this.scene.time.delayedCall(400, () => { if (e && e.destroy) e.destroy(); });
     }
 
     getCubeColors() {
@@ -470,6 +557,11 @@ window.Conveyor = class Conveyor {
         if (this.dashGfx) {
             this.dashGfx.destroy();
             this.dashGfx = null;
+        }
+
+        if (this.boostGfx) {
+            this.boostGfx.destroy();
+            this.boostGfx = null;
         }
     }
 };

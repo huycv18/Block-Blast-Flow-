@@ -165,6 +165,35 @@ window.GameStateManager = class GameStateManager {
         window.SoundMgr?.stopMusic(0.6);
         window.SoundMgr?.winJingle();
 
+        // Region progression: 1 Star per level, but only on its FIRST completion ever
+        // (prevents farming Stars by replaying an already-cleared easy level).
+        try {
+            const levelData = LEVELS?.[this.scene?.currentLevel];
+            const levelKey = String(levelData?.id ?? this.scene?.currentLevel ?? '');
+            let completed = [];
+            try {
+                const parsed = JSON.parse(localStorage.getItem('bbf_completedLevels'));
+                if (Array.isArray(parsed)) completed = parsed;
+            } catch {}
+
+            if (levelKey && !completed.includes(levelKey)) {
+                completed.push(levelKey);
+                localStorage.setItem('bbf_completedLevels', JSON.stringify(completed));
+
+                const stars = (parseInt(localStorage.getItem('bbf_stars'), 10) || 0) + 1;
+                localStorage.setItem('bbf_stars', String(stars));
+                this.starAwarded = true;
+            } else {
+                this.starAwarded = false;
+            }
+
+            // Coin reward — granted on every win (replays included), scaled by difficulty.
+            const COIN_REWARD = { Tutorial: 20, Easy: 30, Normal: 50, Hard: 80, 'Super Hard': 120 };
+            this.coinAwarded = COIN_REWARD[levelData?.difficulty] ?? 30;
+            const coins = (parseInt(localStorage.getItem('bbf_coins'), 10) || 0) + this.coinAwarded;
+            localStorage.setItem('bbf_coins', String(coins));
+        } catch {}
+
         this.scene.cameras.main.flash(420, 255, 255, 255, true);
         this.scene.cameras.main.shake(180, 0.008);
 
@@ -200,6 +229,7 @@ window.GameStateManager = class GameStateManager {
         window.SoundMgr?.loseSfx();
         this.scene.cameras.main.flash(240, 210, 25, 25, true);
         this.scene.cameras.main.shake(340, 0.022);
+        window.PlayerHearts?.spend(1);
     }
 
     // ----------------------------------------------------------
