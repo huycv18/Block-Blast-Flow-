@@ -888,7 +888,7 @@ window.UIScene = class UIScene extends Phaser.Scene {
     createSettingsModal() {
         const cx = CONFIG.GAME_WIDTH / 2;
         const cy = CONFIG.GAME_HEIGHT / 2;
-        const pw = 292, ph = 270;
+        const pw = 292, ph = 332;
         const pLeft = cx - pw / 2, pTop = cy - ph / 2;
 
         const container = this.add.container(0, 0).setDepth(650).setVisible(false);
@@ -1088,6 +1088,53 @@ window.UIScene = class UIScene extends Phaser.Scene {
             0x27AE60,
             (v) => window.SoundMgr?.setSfxVolume(v)
         );
+
+        addDivider(pTop + 240);
+
+        // ── Reset Game (demo helper) — tap once to arm, tap again within 4s to confirm ──
+        const rstY = pTop + 270;
+        const rstW = pw - 36, rstH = 38;
+        const rstBg = this.add.graphics(); container.add(rstBg);
+        const rstLabel = this.add.text(cx, rstY, '🗑  Reset dữ liệu game', {
+            fontFamily: 'Outfit', fontSize: '13px', fontStyle: 'bold', color: '#FF8A8A', resolution: 2,
+        }).setOrigin(0.5); container.add(rstLabel);
+        const rstHint = this.add.text(cx, rstY + 24, 'Xoá tiến trình, mở khoá & tuỳ chỉnh để demo lại', {
+            fontFamily: 'Outfit', fontSize: '10px', color: '#7777AA', resolution: 2,
+        }).setOrigin(0.5); container.add(rstHint);
+
+        let rstArmed = false, rstArmTimer = null;
+        const drawRst = (danger) => {
+            rstBg.clear();
+            rstBg.fillStyle(danger ? 0xB23A3A : 0x2A1E2E, 1);
+            rstBg.fillRoundedRect(cx - rstW / 2, rstY - rstH / 2, rstW, rstH, 10);
+            rstBg.lineStyle(1.5, danger ? 0xFF6B6B : 0x6A3A4A, 0.8);
+            rstBg.strokeRoundedRect(cx - rstW / 2, rstY - rstH / 2, rstW, rstH, 10);
+        };
+        drawRst(false);
+
+        const rstZone = this.add.zone(cx, rstY, rstW, rstH).setInteractive({ useHandCursor: true });
+        container.add(rstZone);
+        rstZone.on('pointerdown', () => {
+            window.SoundMgr?.buttonClick();
+            if (!rstArmed) {
+                rstArmed = true;
+                drawRst(true);
+                rstLabel.setText('⚠  Chạm lần nữa để xác nhận');
+                if (rstArmTimer) rstArmTimer.remove();
+                rstArmTimer = this.time.delayedCall(4000, () => {
+                    rstArmed = false; drawRst(false); rstLabel.setText('🗑  Reset dữ liệu game');
+                });
+            } else {
+                if (rstArmTimer) rstArmTimer.remove();
+                const keys = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k && k.startsWith('bbf_')) keys.push(k);
+                }
+                keys.forEach((k) => localStorage.removeItem(k));
+                window.location.reload();
+            }
+        });
 
         this.settingsModal = { container };
     }
