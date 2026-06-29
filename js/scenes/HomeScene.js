@@ -36,6 +36,14 @@ const _SHOP_TABS = {
     ],
 };
 
+// Per-tab accent colour + badge icon for the candy-colourful Shop card style.
+const _SHOP_TAB_THEME = {
+    noAds:   { accent: 0xE74C3C, glow: 0xFF8A75, icon: '🚫', label: 'No-Ads' },
+    bundle:  { accent: 0x9B59B6, glow: 0xD9A8F0, icon: '📦', label: 'Bundle' },
+    booster: { accent: 0x3498DB, glow: 0x8FD0FF, icon: '⚡', label: 'Booster' },
+    gold:    { accent: 0xF1C40F, glow: 0xFFE680, icon: '🪙', label: 'Gold' },
+};
+
 // Mock leaderboard bots — ranked by furthest level reached, real player inserted by rank.
 const _LB_BOTS = [
     { name: 'Minh Anh', avatar: 2, level: 92 },
@@ -772,6 +780,7 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
             { key: 'leaderboard', icon: '🏆', label: 'Xếp hạng' },
         ];
         const tabW = W / tabs.length;
+        this._navTabRefs = {};
 
         tabs.forEach((tab, i) => {
             const tx = tabW * i + tabW / 2;
@@ -784,16 +793,31 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
                 fontFamily: 'Outfit', fontSize: '10px', fontStyle: isActive ? 'bold' : 'normal',
                 color: isActive ? '#7B6CF6' : '#666680', resolution: 2,
             }).setOrigin(0.5).setDepth(41);
+            this._navTabRefs[tab.key] = { icon, label };
 
             const zone = this.add.zone(tx, ty, tabW, barH).setInteractive({ useHandCursor: true }).setDepth(42);
             this._addPress(zone, [icon, label]);
             zone.on('pointerdown', () => {
                 window.SoundMgr?.buttonClick();
-                if (tab.key === 'home') return;
+                if (tab.key === 'home') {
+                    this._closeLeaderboardModal();
+                    this._closeShopModal();
+                    this._setActiveNavTab('home');
+                    return;
+                }
                 if (tab.key === 'shop') { this._openShopModal(); return; }
                 if (tab.key === 'leaderboard') { this._openLeaderboardModal(); return; }
                 this._showToast(`${tab.label} sắp ra mắt!`);
             });
+        });
+    }
+
+    _setActiveNavTab(key) {
+        Object.entries(this._navTabRefs || {}).forEach(([k, refs]) => {
+            const active = k === key;
+            refs.icon.setAlpha(active ? 1 : 0.5);
+            refs.label.setColor(active ? '#7B6CF6' : '#666680');
+            refs.label.setFontStyle(active ? 'bold' : 'normal');
         });
     }
 
@@ -1773,7 +1797,7 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
     // Shop Screen
     // ──────────────────────────────────────────────────────────
     _buildShopModal(W, H, cx) {
-        const mW = 360, mH = 520;
+        const mW = 372, mH = 600;
         const mX = cx - mW / 2, mY = Math.round(H / 2 - mH / 2);
         this._shopX = mX; this._shopY = mY; this._shopW = mW; this._shopH = mH;
 
@@ -1788,46 +1812,46 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
 
         const blocker = this.add.zone(cx, mY + mH / 2, mW, mH).setInteractive(); c.add(blocker);
 
+        // Panel — candy-bright gold/orange header over a dark card body
         const panel = this.add.graphics();
-        panel.fillStyle(0x16162A, 1); panel.fillRoundedRect(mX, mY, mW, mH, 20);
-        panel.fillStyle(0x27AE60, 1); panel.fillRoundedRect(mX, mY, mW, 50, { tl: 20, tr: 20, bl: 0, br: 0 });
-        panel.lineStyle(1.5, 0x1E8449, 0.6); panel.strokeRoundedRect(mX, mY, mW, mH, 20);
+        panel.fillStyle(0x161A2A, 1); panel.fillRoundedRect(mX, mY, mW, mH, 22);
+        panel.fillGradientStyle(0xFFB13D, 0xFFB13D, 0xFF7A3D, 0xFF7A3D, 1);
+        panel.fillRoundedRect(mX, mY, mW, 58, { tl: 22, tr: 22, bl: 0, br: 0 });
+        panel.lineStyle(2, 0xFFD699, 0.6); panel.strokeRoundedRect(mX, mY, mW, mH, 22);
         c.add(panel);
 
-        c.add(this.add.text(cx, mY + 25, '🛒  SHOP', {
-            fontFamily: 'Outfit', fontSize: '16px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
+        c.add(this.add.text(cx, mY + 29, '🛒  SHOP', {
+            fontFamily: 'Outfit', fontSize: '18px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
         }).setOrigin(0.5));
 
-        const closeX = mX + mW - 26, closeY = mY + 25;
-        c.add(this.add.text(closeX, closeY, '✕', { fontFamily: 'Outfit', fontSize: '17px', color: '#FFFFFF', resolution: 2 }).setOrigin(0.5));
+        const closeX = mX + mW - 30, closeY = mY + 29;
+        const closeBg = this.add.graphics();
+        closeBg.fillStyle(0x00000022, 1); closeBg.fillCircle(closeX, closeY, 15);
+        c.add(closeBg);
+        c.add(this.add.text(closeX, closeY, '✕', { fontFamily: 'Outfit', fontSize: '16px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2 }).setOrigin(0.5));
         const closeZone = this.add.zone(closeX, closeY, 40, 40).setInteractive({ useHandCursor: true });
         c.add(closeZone);
         closeZone.on('pointerdown', () => this._closeShopModal());
 
-        const tabDefs = [
-            { key: 'noAds', label: 'No-Ads' },
-            { key: 'bundle', label: 'Bundle' },
-            { key: 'booster', label: 'Booster' },
-            { key: 'gold', label: 'Gold' },
-        ];
-        const tabY = mY + 72, tabW = mW / tabDefs.length;
+        // Tabs — segmented pill control, one colour per category
+        const tabDefs = ['noAds', 'bundle', 'booster', 'gold'];
+        const tabY = mY + 88, tabPad = 6, tabAreaW = mW - 28, tabW = tabAreaW / tabDefs.length;
         this._shopTabs = [];
-        tabDefs.forEach((tab, i) => {
-            const tx = mX + tabW * i + tabW / 2;
-            const underline = this.add.graphics(); c.add(underline);
-            const label = this.add.text(tx, tabY, tab.label, {
-                fontFamily: 'Outfit', fontSize: '12px', fontStyle: 'bold', color: '#8888AA', resolution: 2,
+        tabDefs.forEach((key, i) => {
+            const theme = _SHOP_TAB_THEME[key];
+            const tx = mX + 14 + tabW * i + tabW / 2;
+            const pillBg = this.add.graphics(); c.add(pillBg);
+            const icon = this.add.text(tx, tabY - 9, theme.icon, { fontSize: '13px', resolution: 2 }).setOrigin(0.5);
+            c.add(icon);
+            const label = this.add.text(tx, tabY + 8, theme.label, {
+                fontFamily: 'Outfit', fontSize: '10px', fontStyle: 'bold', color: '#8888AA', resolution: 2,
             }).setOrigin(0.5); c.add(label);
-            const zone = this.add.zone(tx, tabY, tabW, 32).setInteractive({ useHandCursor: true }); c.add(zone);
-            zone.on('pointerdown', () => { window.SoundMgr?.buttonClick(); this._setShopTab(tab.key); });
-            this._shopTabs.push({ key: tab.key, x: tx, underline, label });
+            const zone = this.add.zone(tx, tabY, tabW - tabPad, 44).setInteractive({ useHandCursor: true }); c.add(zone);
+            zone.on('pointerdown', () => { window.SoundMgr?.buttonClick(); this._setShopTab(key); });
+            this._shopTabs.push({ key, x: tx, pillBg, icon, label, w: tabW - tabPad });
         });
 
-        const divider = this.add.graphics();
-        divider.lineStyle(1, 0x2A2A40, 0.8); divider.lineBetween(mX + 14, tabY + 18, mX + mW - 14, tabY + 18);
-        c.add(divider);
-
-        this._shopContentTop = tabY + 26;
+        this._shopContentTop = tabY + 34;
         this._shopContentH = (mY + mH - 16) - this._shopContentTop;
         const content = this.add.container(0, 0);
         c.add(content);
@@ -1845,9 +1869,14 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         this._shopActiveTab = key;
         this._shopTabs.forEach(t => {
             const active = t.key === key;
-            t.underline.clear();
-            if (active) { t.underline.fillStyle(0x27AE60, 1); t.underline.fillRoundedRect(t.x - 26, t.label.y + 14, 52, 3, 2); }
+            const theme = _SHOP_TAB_THEME[t.key];
+            t.pillBg.clear();
+            if (active) {
+                t.pillBg.fillStyle(theme.accent, 1);
+                t.pillBg.fillRoundedRect(t.x - t.w / 2, t.icon.y - 17, t.w, 34, 12);
+            }
             t.label.setColor(active ? '#FFFFFF' : '#8888AA');
+            t.icon.setAlpha(active ? 1 : 0.55);
         });
         this._renderShopContent();
     }
@@ -1862,48 +1891,81 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         content.removeAll(true);
         const mX = this._shopX, mW = this._shopW, top = this._shopContentTop;
         const items = _SHOP_TABS[this._shopActiveTab] || [];
+        const theme = _SHOP_TAB_THEME[this._shopActiveTab];
 
+        const CARD_H = 92, CARD_STEP = 100;
         items.forEach((item, i) => {
-            const ry = top + i * 76 + 38;
+            const ry = top + i * CARD_STEP + CARD_H / 2 + 4;
             const owned = this._isShopItemOwned(item);
+            const cardL = mX + 14, cardW = mW - 28;
 
-            const rowBg = this.add.graphics();
-            rowBg.fillStyle(0x20202E, 1);
-            rowBg.fillRoundedRect(mX + 14, ry - 32, mW - 28, 64, 14);
-            if (item.tag) { rowBg.lineStyle(1.5, 0xF1C40F, 0.8); rowBg.strokeRoundedRect(mX + 14, ry - 32, mW - 28, 64, 14); }
-            content.add(rowBg);
+            // Card body — two-tone bevel (lighter top sliver, flat body) for a chunky candy feel
+            const cardBg = this.add.graphics();
+            cardBg.fillStyle(0x1E2438, 1);
+            cardBg.fillRoundedRect(cardL, ry - CARD_H / 2, cardW, CARD_H, 16);
+            cardBg.fillStyle(0x262E48, 1);
+            cardBg.fillRoundedRect(cardL, ry - CARD_H / 2, cardW, 8, { tl: 16, tr: 16, bl: 0, br: 0 });
+            cardBg.lineStyle(2, item.tag ? 0xFFD23F : 0x323A56, item.tag ? 0.9 : 1);
+            cardBg.strokeRoundedRect(cardL, ry - CARD_H / 2, cardW, CARD_H, 16);
+            content.add(cardBg);
 
+            // Ribbon tag (HOT ITEM / BEST VALUE / POPULAR) overlapping the top-left corner
             if (item.tag) {
-                content.add(this.add.text(mX + mW - 24, ry - 32, item.tag, {
-                    fontFamily: 'Outfit', fontSize: '8px', fontStyle: 'bold', color: '#1A1408',
-                    backgroundColor: '#F1C40F', padding: { x: 5, y: 2 }, resolution: 2,
-                }).setOrigin(1, 0.5));
+                const tagW = item.tag.length * 6 + 26, tagH = 18;
+                const tagG = this.add.graphics();
+                tagG.fillStyle(0xE8453A, 1);
+                tagG.fillRoundedRect(cardL + 10, ry - CARD_H / 2 - tagH / 2, tagW, tagH, 9);
+                content.add(tagG);
+                content.add(this.add.text(cardL + 10 + tagW / 2, ry - CARD_H / 2 - tagH / 2 + 1, `🔥 ${item.tag}`, {
+                    fontFamily: 'Outfit', fontSize: '9px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
+                }).setOrigin(0.5));
             }
 
-            content.add(this.add.text(mX + 30, ry - 14, item.name, {
+            // Icon badge
+            const badgeX = cardL + 38, badgeY = ry + (item.tag ? 4 : 0);
+            const badgeG = this.add.graphics();
+            badgeG.fillStyle(theme.accent, 1); badgeG.fillCircle(badgeX, badgeY, 24);
+            badgeG.lineStyle(2.5, theme.glow, 1); badgeG.strokeCircle(badgeX, badgeY, 24);
+            content.add(badgeG);
+            const badgeIcon = (item.name.match(/^\p{Emoji}/u)?.[0]) || theme.icon;
+            content.add(this.add.text(badgeX, badgeY, badgeIcon, { fontSize: '20px', resolution: 2 }).setOrigin(0.5));
+
+            // Name + description
+            const textX = cardL + 72;
+            const nameY = ry + (item.tag ? -10 : -14);
+            content.add(this.add.text(textX, nameY, item.name.replace(/^\p{Emoji}\s*/u, ''), {
                 fontFamily: 'Outfit', fontSize: '13px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
             }).setOrigin(0, 0.5));
 
             const descParts = [];
             if (item.desc) descParts.push(item.desc);
             if (item.coin) descParts.push(`+${item.coin} Coin`);
-            content.add(this.add.text(mX + 30, ry + 8, descParts.join(' · '), {
-                fontFamily: 'Outfit', fontSize: '10px', color: '#9999BB', resolution: 2,
-                wordWrap: { width: mW - 130 },
+            content.add(this.add.text(textX, nameY + 18, descParts.join(' · '), {
+                fontFamily: 'Outfit', fontSize: '10px', color: '#9AA3C2', resolution: 2,
+                wordWrap: { width: mW - 190 },
             }).setOrigin(0, 0.5));
 
+            // Price button — chunky two-tone green gem button
+            const btnW = 82, btnH = 36, btnX = mX + mW - 14 - btnW / 2;
+            const priceLabel = owned ? 'ĐÃ MUA' : (item.isIAP ? item.price : `🪙${item.cost}`);
             const btnBg = this.add.graphics();
-            const priceLabel = owned ? 'ĐÃ MUA' : (item.isIAP ? item.price : `💰${item.cost}`);
-            btnBg.fillStyle(owned ? 0x3A3A4E : 0x27AE60, 1);
-            btnBg.fillRoundedRect(mX + mW - 96, ry - 16, 80, 32, 10);
+            if (owned) {
+                btnBg.fillStyle(0x363C54, 1); btnBg.fillRoundedRect(btnX - btnW / 2, ry - btnH / 2, btnW, btnH, 11);
+            } else {
+                btnBg.fillStyle(0x1E9B4C, 1); btnBg.fillRoundedRect(btnX - btnW / 2, ry - btnH / 2, btnW, btnH, 11);
+                btnBg.fillStyle(0x2ECC71, 1); btnBg.fillRoundedRect(btnX - btnW / 2, ry - btnH / 2, btnW, btnH - 8, { tl: 11, tr: 11, bl: 0, br: 0 });
+                btnBg.lineStyle(1.5, 0x7CF0A8, 0.8); btnBg.strokeRoundedRect(btnX - btnW / 2, ry - btnH / 2, btnW, btnH, 11);
+            }
             content.add(btnBg);
-            content.add(this.add.text(mX + mW - 56, ry, priceLabel, {
-                fontFamily: 'Outfit', fontSize: '11px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
-            }).setOrigin(0.5));
+            const priceTxt = this.add.text(btnX, ry, priceLabel, {
+                fontFamily: 'Outfit', fontSize: '12px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
+            }).setOrigin(0.5);
+            content.add(priceTxt);
 
             if (!owned) {
-                const z = this.add.zone(mX + mW - 56, ry, 80, 32).setInteractive({ useHandCursor: true });
+                const z = this.add.zone(btnX, ry, btnW, btnH).setInteractive({ useHandCursor: true });
                 content.add(z);
+                this._addPress(z, [btnBg, priceTxt]);
                 z.on('pointerdown', () => this._buyShopItem(item));
             }
         });
@@ -1936,6 +1998,7 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
 
     _openShopModal() {
         this._setShopTab(this._shopActiveTab || 'noAds');
+        this._setActiveNavTab?.('shop');
         const c = this._shopContainer;
         c.setVisible(true).setAlpha(0).setY(22);
         this.tweens.add({ targets: c, alpha: 1, y: 0, duration: 300, ease: 'Back.easeOut' });
@@ -1943,6 +2006,8 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
 
     _closeShopModal() {
         const c = this._shopContainer;
+        if (!c.visible) return;
+        this._setActiveNavTab?.('home');
         this.tweens.add({
             targets: c, alpha: 0, y: 16, duration: 180, ease: 'Quad.easeIn',
             onComplete: () => c.setVisible(false).setY(0),
@@ -1953,8 +2018,9 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
     // Buy Success popup
     // ──────────────────────────────────────────────────────────
     _buildBuySuccessModal(W, H, cx) {
-        const mW = 280, mH = 240;
+        const mW = 290, mH = 280;
         const mY = Math.round(H / 2 - mH / 2);
+        this._buySuccessCx = cx; this._buySuccessCy = mY + mH / 2;
 
         const c = this.add.container(0, 0).setDepth(95).setVisible(false);
         this._buySuccessContainer = c;
@@ -1966,37 +2032,47 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         c.add(dim); c.add(dimZone);
 
         const panel = this.add.graphics();
-        panel.fillStyle(0x16162A, 1); panel.fillRoundedRect(cx - mW / 2, mY, mW, mH, 20);
-        panel.lineStyle(2, 0xF1C40F, 0.7); panel.strokeRoundedRect(cx - mW / 2, mY, mW, mH, 20);
+        panel.fillStyle(0x1A1A2E, 1); panel.fillRoundedRect(cx - mW / 2, mY, mW, mH, 22);
+        panel.fillGradientStyle(0x3A2A78, 0x3A2A78, 0x1A1A2E, 0x1A1A2E, 1);
+        panel.fillRoundedRect(cx - mW / 2, mY, mW, 80, { tl: 22, tr: 22, bl: 0, br: 0 });
+        panel.lineStyle(2.5, 0xFFD23F, 0.85); panel.strokeRoundedRect(cx - mW / 2, mY, mW, mH, 22);
         c.add(panel);
 
-        this._buySuccessBox = this.add.text(cx, mY + 50, '🎁', { fontSize: '38px', resolution: 2 }).setOrigin(0.5);
+        // Confetti container — populated fresh each time the modal opens
+        this._buySuccessConfetti = this.add.container(0, 0);
+        c.add(this._buySuccessConfetti);
+
+        this._buySuccessBox = this.add.text(cx, mY + 52, '🎁', { fontSize: '46px', resolution: 2 }).setOrigin(0.5);
         c.add(this._buySuccessBox);
 
-        c.add(this.add.text(cx, mY + 92, 'Mua thành công!', {
-            fontFamily: 'Outfit', fontSize: '16px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
+        c.add(this.add.text(cx, mY + 100, 'Chúc mừng!', {
+            fontFamily: 'Outfit', fontSize: '20px', fontStyle: 'bold', color: '#FFD23F', resolution: 2,
         }).setOrigin(0.5));
 
-        this._buySuccessName = this.add.text(cx, mY + 114, '', {
-            fontFamily: 'Outfit', fontSize: '12px', color: '#9999BB', resolution: 2,
+        this._buySuccessName = this.add.text(cx, mY + 122, '', {
+            fontFamily: 'Outfit', fontSize: '12px', color: '#BBBBDD', resolution: 2,
         }).setOrigin(0.5);
         c.add(this._buySuccessName);
 
-        this._buySuccessLines = this.add.text(cx, mY + 150, '', {
-            fontFamily: 'Outfit', fontSize: '12px', fontStyle: 'bold', color: '#2ECC71', resolution: 2,
-            align: 'center', lineSpacing: 4,
-        }).setOrigin(0.5);
-        c.add(this._buySuccessLines);
+        c.add(this.add.text(cx, mY + 146, 'Phần thưởng của bạn', {
+            fontFamily: 'Outfit', fontSize: '11px', color: '#7777AA', resolution: 2,
+        }).setOrigin(0.5));
 
-        const btnY = mY + mH - 32;
+        // Reward chips — colourful pills, populated dynamically (1-3 rewards)
+        this._buySuccessChipRow = this.add.container(cx, mY + 178);
+        c.add(this._buySuccessChipRow);
+
+        const btnY = mY + mH - 34;
         const btnBg = this.add.graphics();
-        btnBg.fillStyle(0x6C5CE7, 1); btnBg.fillRoundedRect(cx - 70, btnY - 18, 140, 36, 12);
+        btnBg.fillStyle(0x1E9B4C, 1); btnBg.fillRoundedRect(cx - 76, btnY - 19, 152, 38, 13);
+        btnBg.fillStyle(0x2ECC71, 1); btnBg.fillRoundedRect(cx - 76, btnY - 19, 152, 28, { tl: 13, tr: 13, bl: 0, br: 0 });
+        btnBg.lineStyle(1.5, 0x7CF0A8, 0.8); btnBg.strokeRoundedRect(cx - 76, btnY - 19, 152, 38, 13);
         c.add(btnBg);
-        const btnTxt = this.add.text(cx, btnY, 'TUYỆT VỜI', {
-            fontFamily: 'Outfit', fontSize: '13px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
+        const btnTxt = this.add.text(cx, btnY, 'TIẾP TỤC', {
+            fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
         }).setOrigin(0.5);
         c.add(btnTxt);
-        const btnZone = this.add.zone(cx, btnY, 140, 36).setInteractive({ useHandCursor: true });
+        const btnZone = this.add.zone(cx, btnY, 152, 38).setInteractive({ useHandCursor: true });
         c.add(btnZone);
         this._addPress(btnZone, [btnBg, btnTxt]);
         btnZone.on('pointerdown', () => this._closeBuySuccessModal());
@@ -2004,7 +2080,28 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
 
     _showBuySuccess(itemName, rewardLines) {
         this._buySuccessName?.setText(itemName);
-        this._buySuccessLines?.setText((rewardLines.filter(Boolean)).join('\n'));
+
+        // Reward chips
+        const chipRow = this._buySuccessChipRow;
+        chipRow.removeAll(true);
+        const rewards = rewardLines.filter(Boolean);
+        const chipIcons = ['🪙', '🚫', '⭐', '🎁'];
+        const chipColors = [0xF1C40F, 0xE74C3C, 0x3498DB, 0x9B59B6];
+        const chipW = 96, gap = 8;
+        const totalW = rewards.length * chipW + (rewards.length - 1) * gap;
+        rewards.forEach((line, i) => {
+            const cxr = -totalW / 2 + chipW / 2 + i * (chipW + gap);
+            const chipG = this.add.graphics();
+            chipG.fillStyle(0x22223A, 1); chipG.fillRoundedRect(cxr - chipW / 2, -16, chipW, 32, 12);
+            chipG.lineStyle(1.5, chipColors[i % chipColors.length], 0.9);
+            chipG.strokeRoundedRect(cxr - chipW / 2, -16, chipW, 32, 12);
+            chipRow.add(chipG);
+            chipRow.add(this.add.text(cxr - chipW / 2 + 18, 0, chipIcons[i % chipIcons.length], { fontSize: '16px', resolution: 2 }).setOrigin(0.5));
+            chipRow.add(this.add.text(cxr + 4, 0, line, {
+                fontFamily: 'Outfit', fontSize: '10px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
+                wordWrap: { width: chipW - 36 }, align: 'center',
+            }).setOrigin(0.5));
+        });
 
         const c = this._buySuccessContainer;
         c.setVisible(true).setAlpha(0).setY(18);
@@ -2012,6 +2109,39 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
 
         this._buySuccessBox?.setScale(0.4);
         this.tweens.add({ targets: this._buySuccessBox, scale: 1, duration: 420, ease: 'Back.easeOut', delay: 80 });
+
+        this._spawnBuySuccessConfetti();
+    }
+
+    /** Bright confetti burst behind the gift icon — sells the "satisfying payoff" of a purchase. */
+    _spawnBuySuccessConfetti() {
+        const confetti = this._buySuccessConfetti;
+        confetti.removeAll(true);
+        const cx = this._buySuccessCx, cy = this._buySuccessCy - 60;
+        const colors = [0xF1C40F, 0xE74C3C, 0x2ECC71, 0x3498DB, 0x9B59B6, 0xFFFFFF];
+
+        for (let i = 0; i < 22; i++) {
+            const color = colors[i % colors.length];
+            const piece = this.add.graphics();
+            piece.fillStyle(color, 1);
+            if (i % 3 === 0) piece.fillCircle(0, 0, 3.5);
+            else piece.fillRect(-3, -2, 6, 4);
+            piece.setPosition(cx, cy);
+            confetti.add(piece);
+
+            const ang = Math.random() * Math.PI * 2;
+            const dist = 70 + Math.random() * 90;
+            this.tweens.add({
+                targets: piece,
+                x: cx + Math.cos(ang) * dist,
+                y: cy + Math.sin(ang) * dist + 40,
+                rotation: (Math.random() - 0.5) * 8,
+                alpha: 0,
+                duration: 700 + Math.random() * 400,
+                delay: Math.random() * 120,
+                ease: 'Quad.easeOut',
+            });
+        }
     }
 
     _closeBuySuccessModal() {
@@ -2027,41 +2157,107 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
     // Leaderboard
     // ──────────────────────────────────────────────────────────
     _buildLeaderboardModal(W, H, cx) {
-        const mW = 340, mH = 560;
-        const mX = cx - mW / 2, mY = Math.round(H / 2 - mH / 2);
+        const barH = 58;
+        const mX = 0, mY = 0, mW = W, mH = H - barH;
 
         const c = this.add.container(0, 0).setDepth(85).setVisible(false);
         this._lbContainer = c;
+        this._lbX = mX; this._lbW = mW; this._lbCx = cx;
 
-        const dim = this.add.graphics();
-        dim.fillStyle(0x000000, 0.75); dim.fillRect(0, 0, W, H);
-        const dimZone = this.add.zone(cx, H / 2, W, H).setInteractive();
-        dimZone.on('pointerdown', () => this._closeLeaderboardModal());
-        c.add(dim); c.add(dimZone);
+        // Base page fill (full takeover — no dim/click-outside, exit via bottom nav)
+        const baseBg = this.add.graphics();
+        baseBg.fillStyle(0x0E1320, 1); baseBg.fillRect(mX, mY, mW, mH);
+        c.add(baseBg);
+        const blocker = this.add.zone(cx, mH / 2, mW, mH).setInteractive(); c.add(blocker);
 
-        const blocker = this.add.zone(cx, mY + mH / 2, mW, mH).setInteractive(); c.add(blocker);
+        // ── Header row ──────────────────────────────────────────
+        const HY = 34;
+        const gearGfx = this.add.graphics();
+        const gearX = 28, GEAR_R = 13;
+        gearGfx.lineStyle(2.5, 0xCFCFEE, 1);
+        gearGfx.strokeCircle(gearX, HY, GEAR_R);
+        for (let i = 0; i < 6; i++) {
+            const a = (i * Math.PI) / 3;
+            gearGfx.lineBetween(
+                gearX + Math.cos(a) * (GEAR_R - 5), HY + Math.sin(a) * (GEAR_R - 5),
+                gearX + Math.cos(a) * (GEAR_R + 2), HY + Math.sin(a) * (GEAR_R + 2)
+            );
+        }
+        gearGfx.fillStyle(0xCFCFEE, 1); gearGfx.fillCircle(gearX, HY, 3.5);
+        c.add(gearGfx);
+        const gearZone = this.add.zone(gearX, HY, 34, 34).setInteractive({ useHandCursor: true });
+        c.add(gearZone);
+        gearZone.on('pointerdown', () => { window.SoundMgr?.buttonClick(); this._openHomeSettings(); });
 
-        const panel = this.add.graphics();
-        panel.fillStyle(0x16162A, 1); panel.fillRoundedRect(mX, mY, mW, mH, 20);
-        panel.fillStyle(0xF1C40F, 1); panel.fillRoundedRect(mX, mY, mW, 50, { tl: 20, tr: 20, bl: 0, br: 0 });
-        panel.lineStyle(1.5, 0xB7950B, 0.6); panel.strokeRoundedRect(mX, mY, mW, mH, 20);
-        c.add(panel);
-
-        c.add(this.add.text(cx, mY + 25, '🏆  XẾP HẠNG', {
-            fontFamily: 'Outfit', fontSize: '16px', fontStyle: 'bold', color: '#1A1408', resolution: 2,
+        c.add(this.add.text(cx, HY, 'LEADER BOARD', {
+            fontFamily: 'Outfit', fontSize: '19px', fontStyle: 'bold', color: '#FFFFFF',
+            letterSpacing: 1, resolution: 2,
         }).setOrigin(0.5));
 
-        const closeX = mX + mW - 26, closeY = mY + 25;
-        c.add(this.add.text(closeX, closeY, '✕', { fontFamily: 'Outfit', fontSize: '17px', color: '#1A1408', resolution: 2 }).setOrigin(0.5));
-        const closeZone = this.add.zone(closeX, closeY, 40, 40).setInteractive({ useHandCursor: true });
-        c.add(closeZone);
-        closeZone.on('pointerdown', () => this._closeLeaderboardModal());
+        const giftX = W - 28;
+        const giftBg = this.add.graphics();
+        giftBg.fillStyle(0xE8543A, 1); giftBg.fillRoundedRect(giftX - 16, HY - 16, 32, 32, 10);
+        giftBg.lineStyle(1.5, 0xFFAB91, 0.7); giftBg.strokeRoundedRect(giftX - 16, HY - 16, 32, 32, 10);
+        c.add(giftBg);
+        c.add(this.add.text(giftX, HY, '🎁', { fontSize: '16px', resolution: 2 }).setOrigin(0.5));
+        const giftZone = this.add.zone(giftX, HY, 34, 34).setInteractive({ useHandCursor: true });
+        c.add(giftZone);
+        giftZone.on('pointerdown', () => { window.SoundMgr?.buttonClick(); this._showToast('Reward Guide sắp ra mắt!'); });
 
-        const contentTop = mY + 62, contentH = mY + mH - 16 - contentTop;
+        // ── Hero: sunset sky + city skyline + top-3 podium ──────
+        const HERO_TOP = 64, HERO_H = 232, HERO_BOTTOM = HERO_TOP + HERO_H;
+        const hero = this.add.graphics();
+        hero.fillGradientStyle(0x3A2A78, 0x3A2A78, 0xE8895A, 0xE8895A, 1);
+        hero.fillRect(0, HERO_TOP, W, HERO_H);
+        c.add(hero);
+
+        // Soft clouds
+        const clouds = this.add.graphics();
+        clouds.fillStyle(0xFFFFFF, 0.12);
+        clouds.fillEllipse(80, HERO_TOP + 36, 70, 22);
+        clouds.fillEllipse(360, HERO_TOP + 24, 60, 18);
+        c.add(clouds);
+
+        // City skyline silhouette along the horizon
+        const sky = this.add.graphics();
+        sky.fillStyle(0x241F3D, 0.55);
+        const buildingW = 30;
+        for (let i = 0; i < 16; i++) {
+            const bx = i * buildingW;
+            const bh = 18 + ((i * 37) % 40);
+            sky.fillRect(bx, HERO_BOTTOM - bh, buildingW - 3, bh);
+        }
+        c.add(sky);
+
+        this._lbHero = this.add.container(0, 0);
+        c.add(this._lbHero);
+        this._lbHeroBottom = HERO_BOTTOM;
+
+        // ── "Gold Tier" banner ───────────────────────────────────
+        const BANNER_TOP = HERO_BOTTOM, BANNER_H = 38, BANNER_BOTTOM = BANNER_TOP + BANNER_H;
+        const banner = this.add.graphics();
+        banner.fillStyle(0x36C2F0, 1); banner.fillRect(0, BANNER_TOP, W, BANNER_H / 2);
+        banner.fillStyle(0x1FA8DB, 1); banner.fillRect(0, BANNER_TOP + BANNER_H / 2, W, BANNER_H / 2);
+        banner.lineStyle(1, 0x0E6E93, 0.8); banner.lineBetween(0, BANNER_BOTTOM, W, BANNER_BOTTOM);
+        c.add(banner);
+        this._lbTierText = this.add.text(cx, BANNER_TOP + BANNER_H / 2, '🏆  Gold Tier', {
+            fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
+        }).setOrigin(0.5);
+        c.add(this._lbTierText);
+        const tierZone = this.add.zone(cx, BANNER_TOP + BANNER_H / 2, W, BANNER_H).setInteractive({ useHandCursor: true });
+        c.add(tierZone);
+        tierZone.on('pointerdown', () => this._showToast('Các Tier khác sắp ra mắt!'));
+
+        // ── List panel ───────────────────────────────────────────
+        const listBg = this.add.graphics();
+        listBg.fillStyle(0x141B2B, 1); listBg.fillRect(0, BANNER_BOTTOM, W, mH - BANNER_BOTTOM);
+        c.add(listBg);
+
+        const contentTop = BANNER_BOTTOM + 10, contentH = mH - 10 - contentTop;
         const content = this.add.container(0, 0);
         c.add(content);
         this._lbContent = content;
-        this._lbX = mX; this._lbW = mW; this._lbContentTop = contentTop; this._lbContentH = contentH;
+        this._lbContentTop = contentTop; this._lbContentH = contentH;
 
         const maskShape = this.make.graphics({ x: 0, y: 0, add: false });
         maskShape.fillRect(mX, contentTop, mW, contentH);
@@ -2077,44 +2273,120 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         return rows;
     }
 
+    /** Top-3 podium — avatar in a framed square, level tag, name, and a coloured podium block with rank badge. */
+    _renderLeaderboardHero(top3) {
+        const hero = this._lbHero;
+        hero.removeAll(true);
+        const cx = this._lbCx, groundY = this._lbHeroBottom;
+
+        // [rank2 (left), rank1 (centre, tallest), rank3 (right)] — avatarY/tagY/nameY fixed
+        // top-down per column; blockH derived from groundY so the podium height still varies by rank.
+        const slots = [
+            { row: top3[1], colX: cx - 110, blockH: 86,  blockColor: 0xF4B400, ringColor: 0xFFE08A, avSize: 48, circleR: 14, tagY: 108, avatarY: 148, nameY: 184, num: '2' },
+            { row: top3[0], colX: cx,       blockH: 108, blockColor: 0xE8453A, ringColor: 0xFF8A80, avSize: 58, circleR: 15, tagY: 76,  avatarY: 118, nameY: 160, num: '1' },
+            { row: top3[2], colX: cx + 110, blockH: 81,  blockColor: 0x2D9CDB, ringColor: 0x8FE0FF, avSize: 44, circleR: 13, tagY: 118, avatarY: 156, nameY: 190, num: '3' },
+        ];
+
+        for (const s of slots) {
+            if (!s.row) continue;
+            const blockTop = groundY - s.blockH;
+            const half = s.avSize / 2;
+            const avatarY = s.avatarY;
+
+            // Level tag
+            const tagW = 46, tagH = 18;
+            const tagG = this.add.graphics();
+            tagG.fillStyle(0x121826, 1); tagG.fillRoundedRect(s.colX - tagW / 2, s.tagY - tagH / 2, tagW, tagH, 9);
+            tagG.lineStyle(1.5, s.blockColor, 1); tagG.strokeRoundedRect(s.colX - tagW / 2, s.tagY - tagH / 2, tagW, tagH, 9);
+            hero.add(tagG);
+            hero.add(this.add.text(s.colX, s.tagY, `Lv${s.row.level}`, {
+                fontFamily: 'Outfit', fontSize: '10px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
+            }).setOrigin(0.5));
+
+            // Avatar frame
+            const frameG = this.add.graphics();
+            frameG.fillStyle(0x1C2236, 1); frameG.fillRoundedRect(s.colX - half, avatarY - half, s.avSize, s.avSize, 12);
+            frameG.lineStyle(3, 0x4DD9F0, 1); frameG.strokeRoundedRect(s.colX - half, avatarY - half, s.avSize, s.avSize, 12);
+            hero.add(frameG);
+            hero.add(this.add.text(s.colX, avatarY, _AVATARS[s.row.avatar % _AVATARS.length], {
+                fontSize: `${Math.round(s.avSize * 0.5)}px`, resolution: 2,
+            }).setOrigin(0.5));
+
+            // Name
+            hero.add(this.add.text(s.colX, s.nameY, s.row.name, {
+                fontFamily: 'Outfit', fontSize: '11px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
+            }).setOrigin(0.5));
+
+            // Podium block
+            const blockW = 76;
+            const blockG = this.add.graphics();
+            blockG.fillStyle(s.blockColor, 1);
+            blockG.fillRoundedRect(s.colX - blockW / 2, blockTop, blockW, s.blockH, { tl: 10, tr: 10, bl: 0, br: 0 });
+            blockG.lineStyle(1.5, s.ringColor, 0.6);
+            blockG.strokeRoundedRect(s.colX - blockW / 2, blockTop, blockW, s.blockH, { tl: 10, tr: 10, bl: 0, br: 0 });
+            hero.add(blockG);
+
+            // Rank number badge, straddling the block's top edge
+            const circleG = this.add.graphics();
+            circleG.fillStyle(0xFFFFFF, 1); circleG.fillCircle(s.colX, blockTop, s.circleR);
+            circleG.lineStyle(2.5, s.blockColor, 1); circleG.strokeCircle(s.colX, blockTop, s.circleR);
+            hero.add(circleG);
+            hero.add(this.add.text(s.colX, blockTop, s.num, {
+                fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold', color: '#1A1A2A', resolution: 2,
+            }).setOrigin(0.5));
+        }
+    }
+
     _renderLeaderboardContent() {
+        const rows = this._getLeaderboardRows();
+        this._renderLeaderboardHero(rows.slice(0, 3));
+
         const content = this._lbContent;
         content.removeAll(true);
         const mX = this._lbX, mW = this._lbW, top = this._lbContentTop;
-        const rows = this._getLeaderboardRows();
+        const restRows = rows.slice(3);
 
-        rows.forEach((row, i) => {
-            const rank = i + 1;
-            const ry = top + i * 54 + 28;
-            const isTop3 = rank <= 3;
-            const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null;
+        const ROW_STEP = 48, ROW_H = 40;
+        restRows.forEach((row, i) => {
+            const rank = i + 4;
+            const ry = top + i * ROW_STEP + ROW_H / 2 + 2;
+
+            if (row.isPlayer) {
+                const tagW = 96, tagH = 16;
+                const tagG = this.add.graphics();
+                tagG.fillStyle(0x4A3CC8, 1); tagG.fillRoundedRect(mX + 22, ry - ROW_H / 2 - tagH + 2, tagW, tagH, 8);
+                content.add(tagG);
+                content.add(this.add.text(mX + 22 + tagW / 2, ry - ROW_H / 2 - tagH / 2 + 3, 'Hạng của bạn', {
+                    fontFamily: 'Outfit', fontSize: '9px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
+                }).setOrigin(0.5));
+            }
 
             const rowBg = this.add.graphics();
-            rowBg.fillStyle(row.isPlayer ? 0x3A2F66 : 0x20202E, 1);
-            rowBg.fillRoundedRect(mX + 14, ry - 24, mW - 28, 48, 12);
-            if (row.isPlayer) { rowBg.lineStyle(1.5, 0x7B6CF6, 1); rowBg.strokeRoundedRect(mX + 14, ry - 24, mW - 28, 48, 12); }
+            rowBg.fillStyle(row.isPlayer ? 0xF4B400 : 0x1B2538, 1);
+            rowBg.fillRoundedRect(mX + 14, ry - ROW_H / 2, mW - 28, ROW_H, 11);
             content.add(rowBg);
 
-            content.add(this.add.text(mX + 32, ry, medal || `${rank}`, {
-                fontFamily: 'Outfit', fontSize: isTop3 ? '18px' : '13px', fontStyle: 'bold',
-                color: isTop3 ? '#FFFFFF' : '#8888AA', resolution: 2,
+            content.add(this.add.text(mX + 32, ry, `${rank}`, {
+                fontFamily: 'Outfit', fontSize: '12px', fontStyle: 'bold',
+                color: row.isPlayer ? '#1A1408' : '#7788AA', resolution: 2,
             }).setOrigin(0.5));
 
             const avG = this.add.graphics();
-            avG.fillStyle(_AVBG[row.avatar % _AVBG.length], 1); avG.fillCircle(mX + 64, ry, 16);
+            avG.fillStyle(_AVBG[row.avatar % _AVBG.length], 1); avG.fillCircle(mX + 62, ry, 13);
             content.add(avG);
-            content.add(this.add.text(mX + 64, ry, _AVATARS[row.avatar % _AVATARS.length], { fontSize: '15px', resolution: 2 }).setOrigin(0.5));
+            content.add(this.add.text(mX + 62, ry, _AVATARS[row.avatar % _AVATARS.length], { fontSize: '13px', resolution: 2 }).setOrigin(0.5));
 
-            content.add(this.add.text(mX + 90, ry, row.name, {
+            content.add(this.add.text(mX + 86, ry, row.name, {
                 fontFamily: 'Outfit', fontSize: '12px', fontStyle: 'bold',
-                color: row.isPlayer ? '#FFFFFF' : '#DDDDEE', resolution: 2,
+                color: row.isPlayer ? '#1A1408' : '#DDE4F0', resolution: 2,
             }).setOrigin(0, 0.5));
 
-            content.add(this.add.text(mX + mW - 26, ry, `Lv.${row.level}`, {
-                fontFamily: 'Outfit', fontSize: '12px', fontStyle: 'bold', color: '#F1C40F', resolution: 2,
+            content.add(this.add.text(mX + mW - 26, ry, `Level ${row.level}`, {
+                fontFamily: 'Outfit', fontSize: '12px', fontStyle: 'bold',
+                color: row.isPlayer ? '#1A1408' : '#4DD9F0', resolution: 2,
             }).setOrigin(1, 0.5));
 
-            const z = this.add.zone(mX + mW / 2, ry, mW - 28, 48).setInteractive({ useHandCursor: true });
+            const z = this.add.zone(mX + mW / 2, ry, mW - 28, ROW_H).setInteractive({ useHandCursor: true });
             content.add(z);
             z.on('pointerdown', () => this._showToast(`${row.name} — Level ${row.level}`));
         });
@@ -2122,6 +2394,7 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
 
     _openLeaderboardModal() {
         this._renderLeaderboardContent();
+        this._setActiveNavTab?.('leaderboard');
         const c = this._lbContainer;
         c.setVisible(true).setAlpha(0).setY(22);
         this.tweens.add({ targets: c, alpha: 1, y: 0, duration: 300, ease: 'Back.easeOut' });
@@ -2129,6 +2402,8 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
 
     _closeLeaderboardModal() {
         const c = this._lbContainer;
+        if (!c.visible) return;
+        this._setActiveNavTab?.('home');
         this.tweens.add({
             targets: c, alpha: 0, y: 16, duration: 180, ease: 'Quad.easeIn',
             onComplete: () => c.setVisible(false).setY(0),
