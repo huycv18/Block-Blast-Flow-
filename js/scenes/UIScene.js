@@ -452,7 +452,17 @@ window.UIScene = class UIScene extends Phaser.Scene {
         }).setOrigin(0.5);
         container.add(retryText);
         const retryZone = this.add.zone(cx, retryY, 180, 36).setInteractive({ useHandCursor: true });
-        retryZone.on('pointerdown', () => { window.SoundMgr?.buttonClick(); this.gameScene.retryLevel(); });
+        retryZone.on('pointerdown', () => {
+            window.SoundMgr?.buttonClick();
+            // The Heart for this loss is already spent (GameStateManager.enterLose).
+            // Out of Hearts — send the player Home, where the Over Lives popup gates PLAY.
+            if ((window.PlayerHearts?.get() ?? 1) <= 0) {
+                this.scene.stop('UIScene');
+                this.gameScene.scene.start('HomeScene');
+                return;
+            }
+            this.gameScene.retryLevel();
+        });
         this._addBtnPress(retryZone, [retryText]);
         container.add(retryZone);
 
@@ -712,8 +722,9 @@ window.UIScene = class UIScene extends Phaser.Scene {
         makeBtn(pTop + 226, '🚪  Quit Level', 0xC0392B, false, () => {
             this.openConfirm(
                 'Rời màn chơi?',
-                'Bạn sẽ quay về Trang chủ.',
+                'Bạn sẽ mất 1 Heart và quay về Trang chủ.',
                 () => {
+                    window.PlayerHearts?.spend(1);
                     this.closePauseModal(false);
                     this.scene.stop('UIScene');
                     this.gameScene.scene.start('HomeScene');

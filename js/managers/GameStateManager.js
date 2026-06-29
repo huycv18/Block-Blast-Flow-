@@ -165,6 +165,12 @@ window.GameStateManager = class GameStateManager {
         window.SoundMgr?.stopMusic(0.6);
         window.SoundMgr?.winJingle();
 
+        // Region progression: 1 Star per level win.
+        try {
+            const stars = (parseInt(localStorage.getItem('bbf_stars'), 10) || 0) + 1;
+            localStorage.setItem('bbf_stars', String(stars));
+        } catch {}
+
         this.scene.cameras.main.flash(420, 255, 255, 255, true);
         this.scene.cameras.main.shake(180, 0.008);
 
@@ -200,6 +206,7 @@ window.GameStateManager = class GameStateManager {
         window.SoundMgr?.loseSfx();
         this.scene.cameras.main.flash(240, 210, 25, 25, true);
         this.scene.cameras.main.shake(340, 0.022);
+        window.PlayerHearts?.spend(1);
     }
 
     // ----------------------------------------------------------
