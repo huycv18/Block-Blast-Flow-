@@ -11,6 +11,14 @@ window.BootScene = class BootScene extends Phaser.Scene {
     create() {
         this._generateColorTextures();
         this._generateGeneralTextures();
+
+        // Editor play-test: skip splash + home, jump straight into the game
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('testLevel')) {
+            this.scene.start('GameScene');
+            return;
+        }
+
         this.scene.start('LoadingScene');
     }
 

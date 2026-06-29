@@ -174,6 +174,16 @@ html, body {
 
 .tool-btn .icon { font-size: 15px; }
 
+.tool-key {
+    margin-left: 4px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.12);
+    font-size: 10px;
+    font-weight: 700;
+    opacity: 0.7;
+}
+
 /* --- Color Swatches --- */
 .color-grid {
     display: grid;
@@ -219,11 +229,53 @@ html, body {
     opacity: 1;
 }
 
+/* --- Search inputs (shape/bank filters) --- */
+.search-input {
+    width: 100%;
+    padding: 6px 10px;
+    margin-bottom: 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    font-size: 12px;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+/* --- Scrollable sub-lists (keep long lists from pushing the whole panel) --- */
+.scroll-box {
+    max-height: 220px;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.scroll-box::-webkit-scrollbar { width: 5px; }
+.scroll-box::-webkit-scrollbar-track { background: transparent; }
+.scroll-box::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.scroll-box-empty {
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 10px 4px;
+    text-align: center;
+}
+
+#bank-list.scroll-box {
+    max-height: 280px;
+    margin-top: 4px;
+}
+
 /* --- Shape Selector --- */
 .shape-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 6px;
+    align-content: start;
 }
 
 .shape-item {
@@ -629,6 +681,31 @@ input[type="number"]::-webkit-outer-spin-button {
     flex-shrink: 0;
 }
 
+.v-fix-btn {
+    margin-left: auto;
+    flex-shrink: 0;
+    padding: 3px 8px;
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--danger);
+    font-family: 'Outfit', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.v-fix-btn:hover:not(:disabled) {
+    background: var(--danger);
+    color: #fff;
+}
+
+.v-fix-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 /* --- Buttons --- */
 .btn {
     display: inline-flex;
@@ -798,7 +875,7 @@ input[type="number"]::-webkit-outer-spin-button {
     white-space: nowrap;
 }
 
-.bank-play, .bank-load, .bank-delete {
+.bank-play, .bank-load, .bank-duplicate, .bank-delete {
     cursor: pointer;
     opacity: 0.5;
     transition: opacity var(--transition);
@@ -807,6 +884,7 @@ input[type="number"]::-webkit-outer-spin-button {
 
 .bank-play:hover { opacity: 1; color: var(--success); }
 .bank-load:hover { opacity: 1; }
+.bank-duplicate:hover { opacity: 1; color: var(--accent-light); }
 .bank-delete:hover { opacity: 1; color: var(--danger); }
 
 /* --- Auto Cars + Drag/Drop --- */

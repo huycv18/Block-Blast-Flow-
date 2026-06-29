@@ -840,7 +840,7 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
 
     // ──────────────────────────────────────────────────────────
     _buildHomeSettingsModal(W, H, cx) {
-        const pw = 292, ph = 372;
+        const pw = 304, ph = 348;
         const pLeft = cx - pw / 2, pTop = H / 2 - ph / 2;
 
         const c = this.add.container(0, 0).setDepth(60).setVisible(false);
@@ -858,18 +858,18 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
 
         // Panel bg
         const panel = this.add.graphics();
-        panel.fillStyle(0x1A1A2A, 1); panel.fillRoundedRect(pLeft, pTop, pw, ph, 18);
-        panel.fillStyle(0x3A2A6A, 1); panel.fillRoundedRect(pLeft, pTop, pw, 50, { tl:18, tr:18, bl:0, br:0 });
-        panel.lineStyle(1.5, 0x4A3CC8, 0.5); panel.strokeRoundedRect(pLeft, pTop, pw, ph, 18);
+        panel.fillStyle(0x1A1A2A, 1); panel.fillRoundedRect(pLeft, pTop, pw, ph, 20);
+        panel.fillStyle(0x3A2A6A, 1); panel.fillRoundedRect(pLeft, pTop, pw, 58, { tl: 20, tr: 20, bl: 0, br: 0 });
+        panel.lineStyle(1.5, 0x4A3CC8, 0.5); panel.strokeRoundedRect(pLeft, pTop, pw, ph, 20);
         c.add(panel);
 
         // Title
-        c.add(this.add.text(cx, pTop + 25, '⚙  Cài đặt', {
+        c.add(this.add.text(cx, pTop + 29, '⚙  Cài đặt', {
             fontFamily: 'Outfit', fontSize: '17px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
         }).setOrigin(0.5));
 
         // Close ✕
-        const clX = pLeft + pw - 26, clY = pTop + 25;
+        const clX = pLeft + pw - 28, clY = pTop + 29;
         c.add(this.add.text(clX, clY, '✕', { fontFamily: 'Outfit', fontSize: '18px', color: '#CCCCEE', resolution: 2 }).setOrigin(0.5));
         const clZ = this.add.zone(clX, clY, 40, 40).setInteractive({ useHandCursor: true }); c.add(clZ);
         clZ.on('pointerdown', () => this._closeHomeSettings());
@@ -877,18 +877,27 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         // Divider helper
         const divider = (y) => {
             const d = this.add.graphics();
-            d.lineStyle(1, 0x3A3A60, 0.5); d.lineBetween(pLeft + 16, y, pLeft + pw - 16, y); c.add(d);
+            d.lineStyle(1, 0x3A3A60, 0.5); d.lineBetween(pLeft + 18, y, pLeft + pw - 18, y); c.add(d);
         };
-        divider(pTop + 50);
+
+        // Icon badge helper
+        const addBadge = (x, y, emoji, bg) => {
+            const g = this.add.graphics();
+            g.fillStyle(bg, 1); g.fillRoundedRect(x - 16, y - 16, 32, 32, 10); c.add(g);
+            c.add(this.add.text(x, y, emoji, { fontSize: '15px', resolution: 2 }).setOrigin(0.5));
+        };
+
+        divider(pTop + 58);
 
         // Sound toggle
-        const row1Y = pTop + 78;
-        c.add(this.add.text(pLeft + 18, row1Y, '🔊  Âm thanh', {
+        const row1Y = pTop + 92;
+        addBadge(pLeft + 34, row1Y, '🔊', 0x2E2A4A);
+        c.add(this.add.text(pLeft + 60, row1Y, 'Âm thanh', {
             fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold', color: '#DDDDEE', resolution: 2,
         }).setOrigin(0, 0.5));
 
-        const TW = 54, TH = 28, TR = 14;
-        const tgX = pLeft + pw - 40;
+        const TW = 48, TH = 26, TR = 13, KR = 10;
+        const tgX = pLeft + pw - 46;
         const tgOffX = tgX - TW / 2 + TR, tgOnX = tgX + TW / 2 - TR;
         let soundOn = !(window.SoundMgr?.muted ?? false);
 
@@ -900,35 +909,32 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         redrawToggle(soundOn); c.add(tgBg);
 
         const tgKnob = this.add.graphics();
-        tgKnob.fillStyle(0xFFFFFF, 1); tgKnob.fillCircle(0, 0, TR - 3);
+        tgKnob.fillStyle(0xFFFFFF, 1); tgKnob.fillCircle(0, 0, KR);
         tgKnob.setPosition(soundOn ? tgOnX : tgOffX, row1Y); c.add(tgKnob);
-
-        const tgLabel = this.add.text(tgX, row1Y, soundOn ? 'BẬT' : 'TẮT', {
-            fontFamily: 'Outfit', fontSize: '9px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
-        }).setOrigin(0.5); c.add(tgLabel);
 
         const tgZone = this.add.zone(tgX, row1Y, TW, TH).setInteractive({ useHandCursor: true }); c.add(tgZone);
         tgZone.on('pointerdown', () => {
             soundOn = !soundOn;
-            redrawToggle(soundOn); tgLabel.setText(soundOn ? 'BẬT' : 'TẮT');
+            redrawToggle(soundOn);
             this.tweens.add({ targets: tgKnob, x: soundOn ? tgOnX : tgOffX, duration: 160, ease: 'Quad.easeOut' });
             const muted = window.SoundMgr?.toggleMute();
             if (!muted) window.SoundMgr?.buttonClick();
         });
 
-        divider(pTop + 106);
+        divider(pTop + 130);
 
         // Slider helper
-        const TRK_M = 20, TRK_S = pLeft + TRK_M, TRK_E = pLeft + pw - TRK_M;
-        const TRK_W = TRK_E - TRK_S, TRK_H = 6, KR = 12;
+        const TRK_M = 24, TRK_S = pLeft + TRK_M, TRK_E = pLeft + pw - TRK_M;
+        const TRK_W = TRK_E - TRK_S, TRK_H = 6, KR2 = 12;
 
-        const makeSlider = (labelY, trackY, emoji, label, initV, accent, onChange) => {
-            c.add(this.add.text(pLeft + 18, labelY, `${emoji}  ${label}`, {
+        const makeSlider = (badgeY, labelY, trackY, emoji, label, badgeBg, initV, accent, onChange) => {
+            addBadge(pLeft + 34, badgeY, emoji, badgeBg);
+            c.add(this.add.text(pLeft + 60, labelY, label, {
                 fontFamily: 'Outfit', fontSize: '13px', color: '#9999BB', resolution: 2,
             }).setOrigin(0, 0.5));
-            const pctTxt = this.add.text(TRK_E + 4, labelY, '', {
+            const pctTxt = this.add.text(TRK_E, labelY, '', {
                 fontFamily: 'Outfit', fontSize: '11px', fontStyle: 'bold', color: '#7777AA', resolution: 2,
-            }).setOrigin(0, 0.5); c.add(pctTxt);
+            }).setOrigin(1, 0.5); c.add(pctTxt);
 
             const trkBg = this.add.graphics();
             trkBg.fillStyle(0x1E1E2E, 1); trkBg.fillRoundedRect(TRK_S, trackY - TRK_H/2, TRK_W, TRK_H, TRK_H/2); c.add(trkBg);
@@ -942,49 +948,49 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
                 trkFill.clear();
                 if (value > 0) { trkFill.fillStyle(accent, 1); trkFill.fillRoundedRect(TRK_S, trackY - TRK_H/2, value * TRK_W, TRK_H, TRK_H/2); }
                 knob.clear();
-                knob.fillStyle(accent, 0.22); knob.fillCircle(kx, trackY, KR + 5);
-                knob.fillStyle(0xFFFFFF, 1); knob.fillCircle(kx, trackY, KR);
-                knob.lineStyle(2.5, accent, 1); knob.strokeCircle(kx, trackY, KR);
+                knob.fillStyle(accent, 0.22); knob.fillCircle(kx, trackY, KR2 + 5);
+                knob.fillStyle(0xFFFFFF, 1); knob.fillCircle(kx, trackY, KR2);
+                knob.lineStyle(2.5, accent, 1); knob.strokeCircle(kx, trackY, KR2);
                 pctTxt.setText(`${Math.round(value * 100)}%`);
                 onChange(value);
             };
             redraw(value);
 
-            const zone = this.add.zone(TRK_S + TRK_W/2, trackY, TRK_W + KR*2, (KR+5)*2+4).setInteractive({ useHandCursor: true }); c.add(zone);
+            const zone = this.add.zone(TRK_S + TRK_W/2, trackY, TRK_W + KR2*2, (KR2+5)*2+4).setInteractive({ useHandCursor: true }); c.add(zone);
             let dragging = false;
             zone.on('pointerdown', (ptr) => { dragging = true; redraw((ptr.x - TRK_S) / TRK_W); });
             this.input.on('pointermove', (ptr) => { if (dragging) redraw((ptr.x - TRK_S) / TRK_W); });
             this.input.on('pointerup', () => { if (dragging) { dragging = false; window.SoundMgr?.buttonClick(); } });
         };
 
-        makeSlider(pTop + 128, pTop + 150, '🎵', 'Nhạc nền',
+        makeSlider(pTop + 160, pTop + 154, pTop + 178, '🎵', 'Nhạc nền', 0x2E2A4A,
             window.SoundMgr?.musicVolume ?? 0.7, 0x7B6CF6,
             (v) => window.SoundMgr?.setMusicVolume(v));
 
-        makeSlider(pTop + 190, pTop + 212, '🎛', 'Hiệu ứng âm',
+        makeSlider(pTop + 218, pTop + 212, pTop + 236, '🎛', 'Hiệu ứng âm', 0x223A2E,
             window.SoundMgr?.sfxVolume ?? 0.5, 0x27AE60,
             (v) => window.SoundMgr?.setSfxVolume(v));
 
-        divider(pTop + 240);
+        divider(pTop + 268);
 
         // Reset Game (demo helper) — tap once to arm, tap again within 4s to confirm
-        const rstY = pTop + 270;
-        const rstW = pw - 36, rstH = 38;
+        const rstY = pTop + 302;
+        const rstW = pw - 40, rstH = 44;
         const rstBg = this.add.graphics(); c.add(rstBg);
-        const rstLabel = this.add.text(cx, rstY, '🗑  Reset dữ liệu game', {
+        const rstLabel = this.add.text(cx, rstY - 7, '🗑  Reset dữ liệu game', {
             fontFamily: 'Outfit', fontSize: '13px', fontStyle: 'bold', color: '#FF8A8A', resolution: 2,
         }).setOrigin(0.5); c.add(rstLabel);
-        const rstHint = this.add.text(cx, rstY + 24, 'Xoá tiến trình, mở khoá & tuỳ chỉnh để demo lại', {
-            fontFamily: 'Outfit', fontSize: '10px', color: '#7777AA', resolution: 2,
+        const rstHint = this.add.text(cx, rstY + 13, 'Xoá tiến trình, mở khoá & tuỳ chỉnh để demo lại', {
+            fontFamily: 'Outfit', fontSize: '10px', color: '#8888AA', resolution: 2,
         }).setOrigin(0.5); c.add(rstHint);
 
         let armed = false, armTimer = null;
         const drawRst = (danger) => {
             rstBg.clear();
             rstBg.fillStyle(danger ? 0xB23A3A : 0x2A1E2E, 1);
-            rstBg.fillRoundedRect(cx - rstW / 2, rstY - rstH / 2, rstW, rstH, 10);
+            rstBg.fillRoundedRect(cx - rstW / 2, rstY - rstH / 2, rstW, rstH, 12);
             rstBg.lineStyle(1.5, danger ? 0xFF6B6B : 0x6A3A4A, 0.8);
-            rstBg.strokeRoundedRect(cx - rstW / 2, rstY - rstH / 2, rstW, rstH, 10);
+            rstBg.strokeRoundedRect(cx - rstW / 2, rstY - rstH / 2, rstW, rstH, 12);
         };
         drawRst(false);
 

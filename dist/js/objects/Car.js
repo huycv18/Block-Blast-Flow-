@@ -271,11 +271,16 @@ window.Car = class Car {
                 if (particles && particles.destroy) particles.destroy();
             });
 
-            // Scale pop on container
+            // Complete any pending slideForward promise so onCarFull can show peekCar
+            this._completeSlide();
+
+            // Snap to active row and kill remaining tweens
+            scene.tweens.killTweensOf(this.container);
+            this.container.setY(CONFIG.CAR_ROW1_Y);
+            this.container.setAlpha(1);
+
             const origScaleX = this.container.scaleX;
             const origScaleY = this.container.scaleY;
-
-            scene.tweens.killTweensOf(this.container);
 
             // Flash: scale up slightly while swapping visuals
             scene.tweens.add({
@@ -478,6 +483,8 @@ window.Car = class Car {
 
     slideForward(targetX, targetY) {
         return new Promise(resolve => {
+            this._pendingSlideResolve = resolve;
+
             this.container.setPosition(targetX, CONFIG.CAR_ROW2_Y);
             this.container.setScale(CONFIG.CAR_ROW2_SCALE);
             this.container.setAlpha(CONFIG.CAR_ROW2_ALPHA);
@@ -493,10 +500,20 @@ window.Car = class Car {
                 ease: 'Back.easeOut',
                 onComplete: () => {
                     this.isActive = true;
+                    this._pendingSlideResolve = null;
                     resolve();
                 },
             });
         });
+    }
+
+    _completeSlide() {
+        if (this._pendingSlideResolve) {
+            const done = this._pendingSlideResolve;
+            this._pendingSlideResolve = null;
+            this.isActive = true;
+            done();
+        }
     }
 
     setPosition(x, y) {

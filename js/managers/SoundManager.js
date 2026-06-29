@@ -332,17 +332,17 @@ window.SoundManager = class SoundManager {
         if (track === 'home') {
             return {
                 bpm: 100,
-                // Sparse, slow melody — long gaps for a calm ambient feel
+                // Calm pentatonic phrase, one note per beat — audible melody, no rush
                 melody: [
-                    10,-1,-1,-1, -1,-1,-1,-1,  8,-1,-1,-1, -1,-1,-1,-1,
-                    12,-1,-1,-1, -1,-1,-1,-1, 10,-1,-1,-1, -1,-1,-1,-1,
+                    10,-1,-1,-1, 12,-1,-1,-1,  11,-1,-1,-1, 8,-1,-1,-1,
+                    10,-1,-1,-1, 13,-1,-1,-1,  12,-1,-1,-1, 10,-1,-1,-1,
                 ],
-                // Slow sustained pad chords
+                // Sustained pad chords overlap note-to-note for a continuous bed (no gaps)
                 chord: [
-                     5,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
-                     7,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
+                     5,-1,-1,-1,  5,-1,-1,-1,  7,-1,-1,-1,  7,-1,-1,-1,
+                     8,-1,-1,-1,  8,-1,-1,-1,  7,-1,-1,-1,  7,-1,-1,-1,
                 ],
-                // Soft, infrequent bass root
+                // Soft bass root, twice per loop
                 bass: [
                      0,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
                      3,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,

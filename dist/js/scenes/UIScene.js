@@ -16,9 +16,13 @@ window.UIScene = class UIScene extends Phaser.Scene {
         this.createBoosterButtons();
         this.createConveyorBar();
         this.createModals();
+        this.createConfirmModal();
+        this.createPauseModal();
         this.createSettingsModal();
         this.createLevelSelectModal();
+        this.createTutorialOverlay();
         this.setupEventListeners();
+        this.maybeShowEntryTutorials();
     }
 
     // ─── Helpers ────────────────────────────────────────────────
@@ -76,12 +80,12 @@ window.UIScene = class UIScene extends Phaser.Scene {
         bg.lineStyle(1, 0x44445A, 0.6);
         bg.lineBetween(0, H, W, H);
 
-        // Settings button
+        // Pause button (was Settings gear — Settings now lives inside the Pause popup)
         const settingsBtn = this.add.image(28, H / 2, 'settings_icon')
             .setInteractive({ useHandCursor: true }).setDepth(101);
         settingsBtn.on('pointerdown', () => {
             window.SoundMgr?.buttonClick();
-            this.openSettingsModal();
+            this.openPauseModal();
         });
         this._addBtnPress(settingsBtn, settingsBtn);
 
@@ -103,7 +107,7 @@ window.UIScene = class UIScene extends Phaser.Scene {
         // Level info (center)
         const levelData = LEVELS[this.gameScene.currentLevel];
         const difficulty = levelData?.difficulty || 'Tutorial';
-        const diffHex = { Tutorial: '#2ECC71', Easy: '#3498DB', Normal: '#F1C40F', Hard: '#E74C3C' }[difficulty] || '#AAAACC';
+        const diffHex = { Tutorial: '#2ECC71', Easy: '#3498DB', Normal: '#F1C40F', Hard: '#E74C3C', 'Super Hard': '#9B59B6' }[difficulty] || '#AAAACC';
 
         this.add.text(W / 2, H / 2 - 9, difficulty.toUpperCase(), {
             fontFamily: 'Outfit', fontSize: '9px', fontStyle: 'bold',
@@ -184,6 +188,33 @@ window.UIScene = class UIScene extends Phaser.Scene {
     }
 
     onBoosterTap(key) {
+        const gs = this.gameScene;
+        if (!gs || gs.gameState.isInputLocked()) return;
+
+        const TUT = {
+            magnet:   { key: 'booster_magnet',   text: 'Magnet hút 1 Block bị Layer trên chặn ra khỏi bàn cờ.' },
+            shuffle:  { key: 'booster_shuffle',  text: 'Shuffle xếp lại Car đang hoạt động để khớp màu Block có thể rút.' },
+            paintGun: { key: 'booster_paintgun', text: 'Paint Gun phá toàn bộ Block cùng màu đang rút được — Cube bay thẳng vào Car.' },
+        };
+        const tut = TUT[key];
+        const btn = this.boosterBtns[key];
+
+        if (tut && btn?.bg) {
+            const rect = {
+                x: btn.bg.x - btn.bg.displayWidth / 2, y: btn.bg.y - btn.bg.displayHeight / 2,
+                w: btn.bg.displayWidth, h: btn.bg.displayHeight,
+            };
+            const shown = this.showTutorial(tut.key, {
+                text: tut.text, rect,
+                onDismiss: () => this._activateBooster(key),
+            });
+            if (shown) return; // activation deferred until the hint is dismissed
+        }
+
+        this._activateBooster(key);
+    }
+
+    _activateBooster(key) {
         const gs = this.gameScene;
         if (!gs || gs.gameState.isInputLocked()) return;
         window.SoundMgr?.boosterActivate();
@@ -324,10 +355,17 @@ window.UIScene = class UIScene extends Phaser.Scene {
             color: '#FFFFFF', resolution: 2,
         }).setOrigin(0.5));
 
-        // Subtitle
-        container.add(this.add.text(cx, pTop + 153, 'Tuyệt vời! Bạn đã hoàn thành màn chơi.', {
+        // Subtitle (text swapped in _showWinModal depending on whether a Star was awarded)
+        const subText = this.add.text(cx, pTop + 150, 'Tuyệt vời! Bạn đã hoàn thành màn chơi.', {
             fontFamily: 'Outfit', fontSize: '12px', color: '#8888AA', resolution: 2,
-        }).setOrigin(0.5));
+        }).setOrigin(0.5);
+        container.add(subText);
+
+        // Reward row — "+Coin  +Star" pill, filled in by _showWinModal
+        const rewardText = this.add.text(cx, pTop + 173, '', {
+            fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold', color: '#F1C40F', resolution: 2,
+        }).setOrigin(0.5).setAlpha(0);
+        container.add(rewardText);
 
         // Next Level button (accent purple)
         const btnY = pTop + ph - 56;
@@ -347,13 +385,13 @@ window.UIScene = class UIScene extends Phaser.Scene {
         this._addBtnPress(btnZone, [btnBg, btnText]);
         container.add(btnZone);
 
-        return { container };
+        return { container, subText, rewardText };
     }
 
     _buildLoseModal() {
         const cx = CONFIG.GAME_WIDTH / 2;
         const cy = CONFIG.GAME_HEIGHT / 2;
-        const pw = 320, ph = 248;
+        const pw = 320, ph = 300;
         const pLeft = cx - pw / 2, pTop = cy - ph / 2;
 
         const container = this.add.container(0, 0).setDepth(500);
@@ -375,20 +413,22 @@ window.UIScene = class UIScene extends Phaser.Scene {
         panel.fillRoundedRect(pLeft, pTop, pw, 5, { tl: 20, tr: 20, bl: 0, br: 0 });
         container.add(panel);
 
-        // Icon + title
-        container.add(this.add.text(cx, pTop + 56, '😔', {
+        // Icon + title (text content swapped per lose reason in _openLoseModal)
+        const titleIcon = this.add.text(cx, pTop + 52, '😔', {
             fontSize: '32px', resolution: 2,
-        }).setOrigin(0.5));
-        container.add(this.add.text(cx, pTop + 100, 'Game Over', {
+        }).setOrigin(0.5);
+        const titleText = this.add.text(cx, pTop + 94, 'Game Over', {
             fontFamily: 'Outfit', fontSize: '24px', fontStyle: 'bold',
             color: '#FFFFFF', resolution: 2,
-        }).setOrigin(0.5));
-        container.add(this.add.text(cx, pTop + 130, 'Hãy thử lại để giải màn này!', {
-            fontFamily: 'Outfit', fontSize: '12px', color: '#886688', resolution: 2,
-        }).setOrigin(0.5));
+        }).setOrigin(0.5);
+        const subText = this.add.text(cx, pTop + 122, 'Hãy thử lại để giải màn này!', {
+            fontFamily: 'Outfit', fontSize: '12px', color: '#886688',
+            align: 'center', wordWrap: { width: pw - 40 }, resolution: 2,
+        }).setOrigin(0.5);
+        container.add(titleIcon); container.add(titleText); container.add(subText);
 
         // Revive button (primary — purple)
-        const reviveY = pTop + ph - 86;
+        const reviveY = pTop + 168;
         const reviveBg = this.add.graphics();
         reviveBg.fillStyle(0x8E44AD, 1);
         reviveBg.fillRoundedRect(cx - 105, reviveY - 21, 210, 42, 11);
@@ -408,7 +448,7 @@ window.UIScene = class UIScene extends Phaser.Scene {
         container.add(reviveZone);
 
         // Retry button (secondary — outlined)
-        const retryY = pTop + ph - 36;
+        const retryY = pTop + 214;
         const retryBg = this.add.graphics();
         retryBg.lineStyle(2, 0x555566, 1);
         retryBg.strokeRoundedRect(cx - 90, retryY - 18, 180, 36, 10);
@@ -419,19 +459,65 @@ window.UIScene = class UIScene extends Phaser.Scene {
         }).setOrigin(0.5);
         container.add(retryText);
         const retryZone = this.add.zone(cx, retryY, 180, 36).setInteractive({ useHandCursor: true });
-        retryZone.on('pointerdown', () => { window.SoundMgr?.buttonClick(); this.gameScene.retryLevel(); });
+        retryZone.on('pointerdown', () => {
+            window.SoundMgr?.buttonClick();
+            // The Heart for this loss is already spent (GameStateManager.enterLose).
+            // Out of Hearts — send the player Home, where the Over Lives popup gates PLAY.
+            if ((window.PlayerHearts?.get() ?? 1) <= 0) {
+                this.scene.stop('UIScene');
+                this.gameScene.scene.start('HomeScene');
+                return;
+            }
+            this.gameScene.retryLevel();
+        });
         this._addBtnPress(retryZone, [retryText]);
         container.add(retryZone);
 
+        // Back to Home (tertiary — plain text link)
+        const homeY = pTop + 252;
+        const homeText = this.add.text(cx, homeY, '🏠   Về màn hình chính', {
+            fontFamily: 'Outfit', fontSize: '12px', fontStyle: 'bold',
+            color: '#6666AA', resolution: 2,
+        }).setOrigin(0.5);
+        container.add(homeText);
+        const homeZone = this.add.zone(cx, homeY, 200, 30).setInteractive({ useHandCursor: true });
+        homeZone.on('pointerdown', () => {
+            window.SoundMgr?.buttonClick();
+            this.scene.stop('UIScene');
+            this.gameScene.scene.start('HomeScene');
+        });
+        this._addBtnPress(homeZone, [homeText]);
+        container.add(homeZone);
+
         // Hold-to-observe hint
-        container.add(this.add.text(cx, pTop + ph + 22, '• Nhấn giữ màn hình để quan sát', {
+        container.add(this.add.text(cx, pTop + ph + 18, '• Nhấn giữ màn hình để quan sát', {
             fontFamily: 'Outfit', fontSize: '11px', color: '#4A4A66', resolution: 2,
         }).setOrigin(0.5));
 
-        return { container };
+        return { container, titleIcon, titleText, subText };
     }
 
     _openLoseModal() {
+        const LOSE_COPY = {
+            CONVEYOR_FULL: {
+                icon: '🚧', title: 'Conveyor đầy!',
+                sub: 'Băng chuyền đã đầy và không Cube nào khớp được với Car đang hoạt động.',
+            },
+            CLEANUP_DEADLOCK: {
+                icon: '😔', title: 'Game Over',
+                sub: 'Không thể hoàn thành Car còn lại. Hãy thử lại để giải màn này!',
+            },
+            BOARD_DEADLOCK: {
+                icon: '😔', title: 'Game Over',
+                sub: 'Không còn Block nào có thể rút được khớp màu. Hãy thử lại nhé!',
+            },
+        };
+        const reason = this.gameScene?.gameState?.loseReason;
+        const copy = LOSE_COPY[reason] || LOSE_COPY.CLEANUP_DEADLOCK;
+        this.loseModal.titleIcon.setText(copy.icon);
+        this.loseModal.titleText.setText(copy.title);
+        this.loseModal.subText.setText(copy.sub);
+
         this._openModal(this.loseModal.container);
 
         // Hold (> 350ms) hides the overlay so the player can inspect the board.
@@ -456,7 +542,27 @@ window.UIScene = class UIScene extends Phaser.Scene {
     _showWinModal() {
         // Reset stars
         this._winStars.forEach(s => { s.setAlpha(0); s.setScale(0.2); });
+
+        // Star is only granted on a level's FIRST-ever clear; Coin is granted on every win.
+        const state = this.gameScene?.gameState;
+        const starAwarded = state?.starAwarded !== false;
+        const coinAwarded = state?.coinAwarded ?? 0;
+        this.winModal.subText.setText(
+            starAwarded
+                ? 'Tuyệt vời! Bạn đã hoàn thành màn chơi.'
+                : 'Tuyệt vời! Bạn đã hoàn thành màn chơi.\n(Màn này đã từng nhận Star trước đó)'
+        );
+        this.winModal.rewardText.setText(
+            starAwarded ? `🪙 +${coinAwarded}    ⭐ +1` : `🪙 +${coinAwarded}`
+        ).setAlpha(0).setScale(0.6);
+
         this._openModal(this.winModal.container);
+        this.time.delayedCall(280, () => {
+            this.tweens.add({
+                targets: this.winModal.rewardText, alpha: 1, scale: 1,
+                duration: 350, ease: 'Back.easeOut',
+            });
+        });
         // Stagger star pop-in after modal lands
         this._winStars.forEach((s, i) => {
             this.time.delayedCall(320 + i * 160, () => {
@@ -466,6 +572,309 @@ window.UIScene = class UIScene extends Phaser.Scene {
                 });
                 window.SoundMgr?.buttonClick?.();
             });
+        });
+    }
+
+    // ─── Confirm Modal (generic Yes/No, used by Pause → Restart/Quit) ────
+
+    createConfirmModal() {
+        const cx = CONFIG.GAME_WIDTH / 2;
+        const cy = CONFIG.GAME_HEIGHT / 2;
+        const pw = 280, ph = 178;
+        const pLeft = cx - pw / 2, pTop = cy - ph / 2;
+
+        const container = this.add.container(0, 0).setDepth(700).setVisible(false);
+
+        const dim = this.add.graphics();
+        dim.fillStyle(0x000000, 0.7);
+        dim.fillRect(0, 0, CONFIG.GAME_WIDTH, CONFIG.GAME_HEIGHT);
+        dim.setInteractive(new Phaser.Geom.Rectangle(0, 0, CONFIG.GAME_WIDTH, CONFIG.GAME_HEIGHT), Phaser.Geom.Rectangle.Contains);
+        container.add(dim);
+
+        const panel = this.add.graphics();
+        panel.fillStyle(0x1A1A2A, 1);
+        panel.fillRoundedRect(pLeft, pTop, pw, ph, 16);
+        panel.lineStyle(2, THEME.UI_PANEL_BORDER, 1);
+        panel.strokeRoundedRect(pLeft, pTop, pw, ph, 16);
+        container.add(panel);
+
+        const titleTxt = this.add.text(cx, pTop + 36, '', {
+            fontFamily: 'Outfit', fontSize: '16px', fontStyle: 'bold',
+            color: '#FFFFFF', resolution: 2,
+        }).setOrigin(0.5);
+        container.add(titleTxt);
+
+        const msgTxt = this.add.text(cx, pTop + 64, '', {
+            fontFamily: 'Outfit', fontSize: '12px', color: '#9999BB',
+            align: 'center', wordWrap: { width: pw - 40 }, resolution: 2,
+        }).setOrigin(0.5);
+        container.add(msgTxt);
+
+        const btnY = pTop + ph - 34;
+
+        const cancelBg = this.add.graphics();
+        cancelBg.lineStyle(2, 0x555566, 1);
+        cancelBg.strokeRoundedRect(cx - 122, btnY - 18, 116, 36, 10);
+        const cancelText = this.add.text(cx - 64, btnY, 'Hủy', {
+            fontFamily: 'Outfit', fontSize: '13px', fontStyle: 'bold',
+            color: '#9999BB', resolution: 2,
+        }).setOrigin(0.5);
+        const cancelZone = this.add.zone(cx - 64, btnY, 116, 36).setInteractive({ useHandCursor: true });
+        cancelZone.on('pointerdown', () => {
+            window.SoundMgr?.buttonClick();
+            this._closeModal(container);
+        });
+        this._addBtnPress(cancelZone, [cancelText]);
+        container.add(cancelBg); container.add(cancelText); container.add(cancelZone);
+
+        const confirmBg = this.add.graphics();
+        confirmBg.fillStyle(0xC0392B, 1);
+        confirmBg.fillRoundedRect(cx + 6, btnY - 18, 116, 36, 10);
+        const confirmText = this.add.text(cx + 64, btnY, 'Xác nhận', {
+            fontFamily: 'Outfit', fontSize: '13px', fontStyle: 'bold',
+            color: '#FFFFFF', resolution: 2,
+        }).setOrigin(0.5);
+        const confirmZone = this.add.zone(cx + 64, btnY, 116, 36).setInteractive({ useHandCursor: true });
+        confirmZone.on('pointerdown', () => {
+            window.SoundMgr?.buttonClick();
+            const cb = this._confirmModalCallback;
+            this._confirmModalCallback = null;
+            this._closeModal(container, () => { if (cb) cb(); });
+        });
+        this._addBtnPress(confirmZone, [confirmBg, confirmText]);
+        container.add(confirmBg); container.add(confirmText); container.add(confirmZone);
+
+        this.confirmModal = { container, titleTxt, msgTxt };
+    }
+
+    /** Show a generic Confirm/Cancel popup. onConfirm runs after the popup closes. */
+    openConfirm(title, message, onConfirm) {
+        if (!this.confirmModal) return;
+        this.confirmModal.titleTxt.setText(title);
+        this.confirmModal.msgTxt.setText(message);
+        this._confirmModalCallback = onConfirm;
+        this._openModal(this.confirmModal.container);
+    }
+
+    // ─── Pause Modal ──────────────────────────────────────────────
+
+    openPauseModal() {
+        if (!this.pauseModal) return;
+        if (!this.gameScene?.pauseGame()) return; // only opens while actually PLAYING
+        window.SoundMgr?.buttonClick();
+        this.pauseModal.container.setScale(0.85);
+        this._openModal(this.pauseModal.container);
+        this.tweens.add({
+            targets: this.pauseModal.container, scaleX: 1, scaleY: 1,
+            duration: 300, ease: 'Back.easeOut',
+        });
+    }
+
+    closePauseModal(andResume = true) {
+        if (!this.pauseModal) return;
+        this._closeModal(this.pauseModal.container, () => {
+            if (andResume) this.gameScene?.resumeGame();
+        });
+    }
+
+    createPauseModal() {
+        const cx = CONFIG.GAME_WIDTH / 2;
+        const cy = CONFIG.GAME_HEIGHT / 2;
+        const pw = 280, ph = 320;
+        const pLeft = cx - pw / 2, pTop = cy - ph / 2;
+
+        const container = this.add.container(0, 0).setDepth(600).setVisible(false);
+
+        const dim = this.add.graphics();
+        dim.fillStyle(0x000000, 0.7);
+        dim.fillRect(0, 0, CONFIG.GAME_WIDTH, CONFIG.GAME_HEIGHT);
+        dim.setInteractive(new Phaser.Geom.Rectangle(0, 0, CONFIG.GAME_WIDTH, CONFIG.GAME_HEIGHT), Phaser.Geom.Rectangle.Contains);
+        container.add(dim);
+
+        const panel = this.add.graphics();
+        panel.fillStyle(0x1A1A2A, 1);
+        panel.fillRoundedRect(pLeft, pTop, pw, ph, 18);
+        panel.lineStyle(2, THEME.UI_PANEL_BORDER, 1);
+        panel.strokeRoundedRect(pLeft, pTop, pw, ph, 18);
+        container.add(panel);
+
+        container.add(this.add.text(cx, pTop + 34, '⏸  Tạm dừng', {
+            fontFamily: 'Outfit', fontSize: '18px', fontStyle: 'bold',
+            color: '#FFFFFF', resolution: 2,
+        }).setOrigin(0.5));
+
+        // Small settings icon — opens the Settings modal on top, Pause stays underneath
+        const setX = pLeft + pw - 26, setY = pTop + 26;
+        const setBg = this.add.graphics();
+        setBg.fillStyle(0x3A3A4E, 1);
+        setBg.fillCircle(setX, setY, 14);
+        const setIcon = this.add.image(setX, setY, 'settings_icon').setScale(0.7);
+        const setZone = this.add.zone(setX, setY, 30, 30).setInteractive({ useHandCursor: true });
+        setZone.on('pointerdown', () => {
+            window.SoundMgr?.buttonClick();
+            this.openSettingsModal();
+        });
+        this._addBtnPress(setZone, [setBg, setIcon]);
+        container.add(setBg); container.add(setIcon); container.add(setZone);
+
+        const makeBtn = (y, label, bgColor, isOutline, onTap) => {
+            const bg = this.add.graphics();
+            if (isOutline) {
+                bg.lineStyle(2, bgColor, 1);
+                bg.strokeRoundedRect(cx - 110, y - 22, 220, 44, 12);
+            } else {
+                bg.fillStyle(bgColor, 1);
+                bg.fillRoundedRect(cx - 110, y - 22, 220, 44, 12);
+            }
+            const text = this.add.text(cx, y, label, {
+                fontFamily: 'Outfit', fontSize: '15px', fontStyle: 'bold',
+                color: isOutline ? '#CCCCDD' : '#FFFFFF', resolution: 2,
+            }).setOrigin(0.5);
+            const zone = this.add.zone(cx, y, 220, 44).setInteractive({ useHandCursor: true });
+            zone.on('pointerdown', () => { window.SoundMgr?.buttonClick(); onTap(); });
+            this._addBtnPress(zone, [bg, text]);
+            container.add(bg); container.add(text); container.add(zone);
+        };
+
+        makeBtn(pTop + 110, '▶  Resume', 0x27AE60, false, () => this.closePauseModal(true));
+
+        makeBtn(pTop + 168, '🔄  Restart', 0xE67E22, false, () => {
+            this.openConfirm(
+                'Chơi lại màn này?',
+                'Tiến trình hiện tại sẽ mất.',
+                () => { this.closePauseModal(false); this.gameScene.retryLevel(); }
+            );
+        });
+
+        makeBtn(pTop + 226, '🚪  Quit Level', 0xC0392B, false, () => {
+            this.openConfirm(
+                'Rời màn chơi?',
+                'Bạn sẽ mất 1 Heart và quay về Trang chủ.',
+                () => {
+                    window.PlayerHearts?.spend(1);
+                    this.closePauseModal(false);
+                    this.scene.stop('UIScene');
+                    this.gameScene.scene.start('HomeScene');
+                }
+            );
+        });
+
+        this.pauseModal = { container };
+    }
+
+    // ─── Tutorial Overlay (first-time mechanic hints) ────────────
+
+    createTutorialOverlay() {
+        const W = CONFIG.GAME_WIDTH, H = CONFIG.GAME_HEIGHT;
+        const container = this.add.container(0, 0).setDepth(800).setVisible(false);
+
+        const dim = this.add.graphics();
+        dim.fillStyle(0x000000, 0.6);
+        dim.fillRect(0, 0, W, H);
+        dim.setInteractive(new Phaser.Geom.Rectangle(0, 0, W, H), Phaser.Geom.Rectangle.Contains);
+        container.add(dim);
+
+        const ring = this.add.graphics();
+        container.add(ring);
+
+        const textBox = this.add.text(W / 2, H / 2, '', {
+            fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold',
+            color: '#FFFFFF', align: 'center', wordWrap: { width: W - 80 },
+            resolution: 2,
+        }).setOrigin(0.5);
+        container.add(textBox);
+
+        const okBg = this.add.graphics();
+        const okText = this.add.text(0, 0, 'Đã hiểu', {
+            fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold',
+            color: '#FFFFFF', resolution: 2,
+        }).setOrigin(0.5);
+        const okZone = this.add.zone(0, 0, 120, 40).setInteractive({ useHandCursor: true });
+        okZone.on('pointerdown', () => this._dismissTutorial());
+        this._addBtnPress(okZone, [okBg, okText]);
+        container.add(okBg); container.add(okText); container.add(okZone);
+
+        this.tutorialOverlay = { container, ring, textBox, okBg, okText, okZone };
+        this._tutorialActive = false;
+        this._tutorialQueue = [];
+    }
+
+    /**
+     * Show a one-time hint overlay for `key` (skipped forever once seen).
+     * rect: optional {x,y,w,h} screen area to highlight with a glowing ring.
+     * onDismiss: optional callback fired after the player taps OK.
+     * Returns true if the overlay was shown (or queued), false if already seen.
+     */
+    showTutorial(key, { text, rect = null, onDismiss = null } = {}) {
+        if (localStorage.getItem(`bbf_tut_${key}`) === '1') return false;
+
+        if (this._tutorialActive) {
+            this._tutorialQueue.push({ key, text, rect, onDismiss });
+            return true;
+        }
+
+        this._tutorialActive = true;
+        this.gameScene?.pauseGame();
+
+        const W = CONFIG.GAME_WIDTH, H = CONFIG.GAME_HEIGHT;
+        const { ring, textBox, okBg, okText, okZone } = this.tutorialOverlay;
+
+        ring.clear();
+        let textY = H / 2;
+        if (rect) {
+            const r = 14;
+            ring.lineStyle(3, 0xF1C40F, 0.95);
+            ring.strokeRoundedRect(rect.x, rect.y, rect.w, rect.h, r);
+            ring.lineStyle(1.5, 0xF1C40F, 0.35);
+            ring.strokeRoundedRect(rect.x - 5, rect.y - 5, rect.w + 10, rect.h + 10, r + 4);
+
+            const isTop = (rect.y + rect.h / 2) < H / 2;
+            textY = isTop ? Math.min(H - 90, rect.y + rect.h + 56) : Math.max(90, rect.y - 56);
+        }
+
+        textBox.setText(text || '').setPosition(W / 2, textY);
+        const okY = textY + 40;
+        okBg.clear();
+        okBg.fillStyle(0x6C5CE7, 1);
+        okBg.fillRoundedRect(W / 2 - 60, okY - 20, 120, 40, 12);
+        okText.setPosition(W / 2, okY);
+        okZone.setPosition(W / 2, okY);
+
+        this._activeTutorialKey = key;
+        this._pendingTutorialDismiss = onDismiss;
+        this._openModal(this.tutorialOverlay.container);
+        return true;
+    }
+
+    _dismissTutorial() {
+        window.SoundMgr?.buttonClick();
+        const key = this._activeTutorialKey;
+        const cb = this._pendingTutorialDismiss;
+        this._pendingTutorialDismiss = null;
+
+        this._closeModal(this.tutorialOverlay.container, () => {
+            this._tutorialActive = false;
+            this.gameScene?.resumeGame();
+            if (cb) cb();
+
+            if (this._tutorialQueue.length > 0) {
+                const next = this._tutorialQueue.shift();
+                this.showTutorial(next.key, next);
+            }
+        });
+
+        if (key) localStorage.setItem(`bbf_tut_${key}`, '1');
+    }
+
+    /** First-ever-level hint: explains the core "tap to pull" mechanic before any input. */
+    maybeShowEntryTutorials() {
+        const boardRect = {
+            x: CONFIG.BOARD_OFFSET_X, y: CONFIG.BOARD_OFFSET_Y,
+            w: CONFIG.GRID_COLS * CONFIG.CELL_SIZE, h: CONFIG.GRID_ROWS * CONFIG.CELL_SIZE,
+        };
+        this.showTutorial('tap_block', {
+            text: 'Chạm vào một Block để rút nó ra khỏi bàn cờ và phá thành Cube!',
+            rect: boardRect,
         });
     }
 
@@ -479,10 +888,10 @@ window.UIScene = class UIScene extends Phaser.Scene {
     createSettingsModal() {
         const cx = CONFIG.GAME_WIDTH / 2;
         const cy = CONFIG.GAME_HEIGHT / 2;
-        const pw = 292, ph = 380;
+        const pw = 304, ph = 348;
         const pLeft = cx - pw / 2, pTop = cy - ph / 2;
 
-        const container = this.add.container(0, 0).setDepth(600).setVisible(false);
+        const container = this.add.container(0, 0).setDepth(650).setVisible(false);
 
         // Dim
         const dim = this.add.graphics();
@@ -494,19 +903,21 @@ window.UIScene = class UIScene extends Phaser.Scene {
         // Panel
         const panel = this.add.graphics();
         panel.fillStyle(0x1A1A2A, 1);
-        panel.fillRoundedRect(pLeft, pTop, pw, ph, 18);
-        panel.lineStyle(2, THEME.UI_PANEL_BORDER, 1);
-        panel.strokeRoundedRect(pLeft, pTop, pw, ph, 18);
+        panel.fillRoundedRect(pLeft, pTop, pw, ph, 20);
+        panel.fillStyle(0x2A2448, 1);
+        panel.fillRoundedRect(pLeft, pTop, pw, 58, { tl: 20, tr: 20, bl: 0, br: 0 });
+        panel.lineStyle(1.5, THEME.UI_PANEL_BORDER, 0.6);
+        panel.strokeRoundedRect(pLeft, pTop, pw, ph, 20);
         container.add(panel);
 
         // Title
-        container.add(this.add.text(cx, pTop + 28, '⚙️  Tùy chọn', {
+        container.add(this.add.text(cx, pTop + 29, '⚙️  Tùy chọn', {
             fontFamily: 'Outfit', fontSize: '18px', fontStyle: 'bold',
             color: '#FFFFFF', resolution: 2,
         }).setOrigin(0.5));
 
         // Close button
-        const clX = pLeft + pw - 22, clY = pTop + 22;
+        const clX = pLeft + pw - 28, clY = pTop + 29;
         const closeBg = this.add.graphics();
         closeBg.fillStyle(0x3A3A4E, 1);
         closeBg.fillCircle(clX, clY, 13);
@@ -526,21 +937,32 @@ window.UIScene = class UIScene extends Phaser.Scene {
         // Helper: thin section divider
         const addDivider = (y) => {
             const d = this.add.graphics();
-            d.lineStyle(1, THEME.UI_PANEL_BORDER, 0.35);
-            d.lineBetween(pLeft + 16, y, pLeft + pw - 16, y);
+            d.lineStyle(1, THEME.UI_PANEL_BORDER, 0.3);
+            d.lineBetween(pLeft + 18, y, pLeft + pw - 18, y);
             container.add(d);
         };
-        addDivider(pTop + 50);
+
+        // Helper: small rounded icon badge
+        const addBadge = (x, y, emoji, bg) => {
+            const g = this.add.graphics();
+            g.fillStyle(bg, 1);
+            g.fillRoundedRect(x - 16, y - 16, 32, 32, 10);
+            container.add(g);
+            container.add(this.add.text(x, y, emoji, { fontSize: '15px', resolution: 2 }).setOrigin(0.5));
+        };
+
+        addDivider(pTop + 58);
 
         // ── Sound on/off toggle ──────────────────────────────────────
-        const row1Y = pTop + 80;
-        container.add(this.add.text(pLeft + 20, row1Y, '🔊  Âm thanh', {
+        const row1Y = pTop + 92;
+        addBadge(pLeft + 34, row1Y, '🔊', 0x2E2A4A);
+        container.add(this.add.text(pLeft + 60, row1Y, 'Âm thanh', {
             fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold',
             color: '#DDDDEE', resolution: 2,
         }).setOrigin(0, 0.5));
 
-        const TW = 54, TH = 30, TR = 15;
-        const tgX = pLeft + pw - 42;
+        const TW = 48, TH = 26, TR = 13, KR = 10;
+        const tgX = pLeft + pw - 46;
         const tgOffX = tgX - TW / 2 + TR, tgOnX = tgX + TW / 2 - TR;
         let soundOn = !(window.SoundMgr?.muted ?? false);
 
@@ -555,21 +977,14 @@ window.UIScene = class UIScene extends Phaser.Scene {
 
         const tgKnob = this.add.graphics();
         tgKnob.fillStyle(0xFFFFFF, 1);
-        tgKnob.fillCircle(0, 0, TR - 4);
+        tgKnob.fillCircle(0, 0, KR);
         tgKnob.setPosition(soundOn ? tgOnX : tgOffX, row1Y);
         container.add(tgKnob);
-
-        const tgLabel = this.add.text(tgX, row1Y, soundOn ? 'BẬT' : 'TẮT', {
-            fontFamily: 'Outfit', fontSize: '9px', fontStyle: 'bold',
-            color: '#FFFFFF', resolution: 2,
-        }).setOrigin(0.5);
-        container.add(tgLabel);
 
         const tgZone = this.add.zone(tgX, row1Y, TW, TH).setInteractive({ useHandCursor: true });
         tgZone.on('pointerdown', () => {
             soundOn = !soundOn;
             redrawToggle(soundOn);
-            tgLabel.setText(soundOn ? 'BẬT' : 'TẮT');
             this.tweens.add({ targets: tgKnob, x: soundOn ? tgOnX : tgOffX, duration: 160, ease: 'Quad.easeOut' });
             const muted = window.SoundMgr?.toggleMute();
             if (this.muteBtnIcon) this.muteBtnIcon.setText(muted ? '🔇' : '🔊');
@@ -577,29 +992,29 @@ window.UIScene = class UIScene extends Phaser.Scene {
         });
         container.add(tgZone);
 
-        addDivider(pTop + 108);
+        addDivider(pTop + 130);
 
         // ── Slider helper ────────────────────────────────────────────
         // Each slider: label row + track row.
         // Pointer coords are in world space; since container lives at (0,0)
         // after animation, local x = world x.
-        const TRK_MARGIN = 22;
+        const TRK_MARGIN = 24;
         const TRK_START  = pLeft + TRK_MARGIN;
         const TRK_END    = pLeft + pw - TRK_MARGIN;
         const TRK_W      = TRK_END - TRK_START;
         const TRK_H      = 6;
         const KNOB_R     = 12;
 
-        const makeSlider = (labelY, trackY, labelEmoji, labelStr, initV, accentColor, onChange) => {
-            // Label + percentage
-            container.add(this.add.text(pLeft + 20, labelY, `${labelEmoji}  ${labelStr}`, {
+        const makeSlider = (badgeY, labelY, trackY, labelEmoji, labelStr, badgeBg, initV, accentColor, onChange) => {
+            addBadge(pLeft + 34, badgeY, labelEmoji, badgeBg);
+            container.add(this.add.text(pLeft + 60, labelY, labelStr, {
                 fontFamily: 'Outfit', fontSize: '13px', color: '#9999BB', resolution: 2,
             }).setOrigin(0, 0.5));
 
-            const pctTxt = this.add.text(TRK_END + 4, labelY, '', {
+            const pctTxt = this.add.text(TRK_END, labelY, '', {
                 fontFamily: 'Outfit', fontSize: '12px', fontStyle: 'bold',
                 color: '#7777AA', resolution: 2,
-            }).setOrigin(0, 0.5);
+            }).setOrigin(1, 0.5);
             container.add(pctTxt);
 
             // Track background
@@ -664,8 +1079,8 @@ window.UIScene = class UIScene extends Phaser.Scene {
 
         // ── Music volume ─────────────────────────────────────────────
         makeSlider(
-            pTop + 132, pTop + 156,
-            '🎵', 'Nhạc nền',
+            pTop + 160, pTop + 154, pTop + 178,
+            '🎵', 'Nhạc nền', 0x2E2A4A,
             window.SoundMgr?.musicVolume ?? 0.7,
             0x7B6CF6,
             (v) => window.SoundMgr?.setMusicVolume(v)
@@ -673,55 +1088,60 @@ window.UIScene = class UIScene extends Phaser.Scene {
 
         // ── SFX volume ───────────────────────────────────────────────
         makeSlider(
-            pTop + 188, pTop + 212,
-            '🎛', 'Hiệu ứng âm',
+            pTop + 218, pTop + 212, pTop + 236,
+            '🎛', 'Hiệu ứng âm', 0x223A2E,
             window.SoundMgr?.sfxVolume ?? 0.5,
             0x27AE60,
             (v) => window.SoundMgr?.setSfxVolume(v)
         );
 
-        addDivider(pTop + 240);
+        addDivider(pTop + 268);
 
-        // ── Restart button ───────────────────────────────────────────
-        const btnY = pTop + 274;
-        const restartBg = this.add.graphics();
-        restartBg.fillStyle(0xE67E22, 1);
-        restartBg.fillRoundedRect(cx - 100, btnY - 20, 200, 40, 12);
-        const restartText = this.add.text(cx, btnY, '🔄  Chơi lại màn này', {
-            fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold',
-            color: '#FFFFFF', resolution: 2,
-        }).setOrigin(0.5);
-        const restartZone = this.add.zone(cx, btnY, 200, 40).setInteractive({ useHandCursor: true });
-        restartZone.on('pointerdown', () => {
-            window.SoundMgr?.buttonClick();
-            this._closeModal(container, () => this.gameScene.retryLevel());
-        });
-        this._addBtnPress(restartZone, [restartBg, restartText]);
-        container.add(restartBg);
-        container.add(restartText);
-        container.add(restartZone);
+        // ── Reset Game (demo helper) — tap once to arm, tap again within 4s to confirm ──
+        const rstY = pTop + 302;
+        const rstW = pw - 40, rstH = 44;
+        const rstBg = this.add.graphics(); container.add(rstBg);
+        const rstLabel = this.add.text(cx, rstY - 7, '🗑  Reset dữ liệu game', {
+            fontFamily: 'Outfit', fontSize: '13px', fontStyle: 'bold', color: '#FF8A8A', resolution: 2,
+        }).setOrigin(0.5); container.add(rstLabel);
+        const rstHint = this.add.text(cx, rstY + 13, 'Xoá tiến trình, mở khoá & tuỳ chỉnh để demo lại', {
+            fontFamily: 'Outfit', fontSize: '10px', color: '#8888AA', resolution: 2,
+        }).setOrigin(0.5); container.add(rstHint);
 
-        // ── Exit to Home button ──────────────────────────────────────
-        const homeY = pTop + 330;
-        const homeBg = this.add.graphics();
-        homeBg.fillStyle(0xC0392B, 1);
-        homeBg.fillRoundedRect(cx - 100, homeY - 20, 200, 40, 12);
-        const homeText = this.add.text(cx, homeY, '🏠  Về màn hình chính', {
-            fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold',
-            color: '#FFFFFF', resolution: 2,
-        }).setOrigin(0.5);
-        const homeZone = this.add.zone(cx, homeY, 200, 40).setInteractive({ useHandCursor: true });
-        homeZone.on('pointerdown', () => {
+        let rstArmed = false, rstArmTimer = null;
+        const drawRst = (danger) => {
+            rstBg.clear();
+            rstBg.fillStyle(danger ? 0xB23A3A : 0x2A1E2E, 1);
+            rstBg.fillRoundedRect(cx - rstW / 2, rstY - rstH / 2, rstW, rstH, 12);
+            rstBg.lineStyle(1.5, danger ? 0xFF6B6B : 0x6A3A4A, 0.8);
+            rstBg.strokeRoundedRect(cx - rstW / 2, rstY - rstH / 2, rstW, rstH, 12);
+        };
+        drawRst(false);
+
+        const rstZone = this.add.zone(cx, rstY, rstW, rstH).setInteractive({ useHandCursor: true });
+        container.add(rstZone);
+        this._addBtnPress(rstZone, [rstLabel, rstHint]);
+        rstZone.on('pointerdown', () => {
             window.SoundMgr?.buttonClick();
-            this._closeModal(container, () => {
-                this.scene.stop('UIScene');
-                this.gameScene.scene.start('HomeScene');
-            });
+            if (!rstArmed) {
+                rstArmed = true;
+                drawRst(true);
+                rstLabel.setText('⚠  Chạm lần nữa để xác nhận');
+                if (rstArmTimer) rstArmTimer.remove();
+                rstArmTimer = this.time.delayedCall(4000, () => {
+                    rstArmed = false; drawRst(false); rstLabel.setText('🗑  Reset dữ liệu game');
+                });
+            } else {
+                if (rstArmTimer) rstArmTimer.remove();
+                const keys = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k && k.startsWith('bbf_')) keys.push(k);
+                }
+                keys.forEach((k) => localStorage.removeItem(k));
+                window.location.reload();
+            }
         });
-        this._addBtnPress(homeZone, [homeBg, homeText]);
-        container.add(homeBg);
-        container.add(homeText);
-        container.add(homeZone);
 
         this.settingsModal = { container };
     }
@@ -816,8 +1236,8 @@ window.UIScene = class UIScene extends Phaser.Scene {
         const cardAreaLeft = pLeft + 15;
         const cardW = (pw - 30 - 10) / 2;
         const cardH = 82;
-        const DIFF_BG  = { Tutorial: 0x1A7A4A, Easy: 0x1A487A, Normal: 0x7A6A1A, Hard: 0x7A1A1A };
-        const DIFF_HEX = { Tutorial: '#2ECC71', Easy: '#3498DB', Normal: '#F1C40F', Hard: '#E74C3C' };
+        const DIFF_BG  = { Tutorial: 0x1A7A4A, Easy: 0x1A487A, Normal: 0x7A6A1A, Hard: 0x7A1A1A, 'Super Hard': 0x5B2C6F };
+        const DIFF_HEX = { Tutorial: '#2ECC71', Easy: '#3498DB', Normal: '#F1C40F', Hard: '#E74C3C', 'Super Hard': '#9B59B6' };
 
         const buildPage = (page) => {
             cardItems.forEach(item => container.remove(item, true));
@@ -919,7 +1339,9 @@ window.UIScene = class UIScene extends Phaser.Scene {
             if (newState === 'WIN') {
                 this.cleanupText.setVisible(false);
                 this.tweens.killTweensOf(this.cleanupText);
-                this._showWinModal();
+                // Let the win flash/shake/star-burst payoff (triggered right after this
+                // listener returns) play out before the modal dims the screen.
+                this.time.delayedCall(1100, () => this._showWinModal());
             } else if (newState === 'LOSE') {
                 this.time.delayedCall(3000, () => this._openLoseModal());
             } else if (newState === 'CLEANUP') {
