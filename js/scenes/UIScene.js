@@ -355,10 +355,17 @@ window.UIScene = class UIScene extends Phaser.Scene {
             color: '#FFFFFF', resolution: 2,
         }).setOrigin(0.5));
 
-        // Subtitle
-        container.add(this.add.text(cx, pTop + 153, 'Tuyệt vời! Bạn đã hoàn thành màn chơi.', {
+        // Subtitle (text swapped in _showWinModal depending on whether a Star was awarded)
+        const subText = this.add.text(cx, pTop + 150, 'Tuyệt vời! Bạn đã hoàn thành màn chơi.', {
             fontFamily: 'Outfit', fontSize: '12px', color: '#8888AA', resolution: 2,
-        }).setOrigin(0.5));
+        }).setOrigin(0.5);
+        container.add(subText);
+
+        // Reward row — "+Coin  +Star" pill, filled in by _showWinModal
+        const rewardText = this.add.text(cx, pTop + 173, '', {
+            fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold', color: '#F1C40F', resolution: 2,
+        }).setOrigin(0.5).setAlpha(0);
+        container.add(rewardText);
 
         // Next Level button (accent purple)
         const btnY = pTop + ph - 56;
@@ -378,7 +385,7 @@ window.UIScene = class UIScene extends Phaser.Scene {
         this._addBtnPress(btnZone, [btnBg, btnText]);
         container.add(btnZone);
 
-        return { container };
+        return { container, subText, rewardText };
     }
 
     _buildLoseModal() {
@@ -535,7 +542,27 @@ window.UIScene = class UIScene extends Phaser.Scene {
     _showWinModal() {
         // Reset stars
         this._winStars.forEach(s => { s.setAlpha(0); s.setScale(0.2); });
+
+        // Star is only granted on a level's FIRST-ever clear; Coin is granted on every win.
+        const state = this.gameScene?.gameState;
+        const starAwarded = state?.starAwarded !== false;
+        const coinAwarded = state?.coinAwarded ?? 0;
+        this.winModal.subText.setText(
+            starAwarded
+                ? 'Tuyệt vời! Bạn đã hoàn thành màn chơi.'
+                : 'Tuyệt vời! Bạn đã hoàn thành màn chơi.\n(Màn này đã từng nhận Star trước đó)'
+        );
+        this.winModal.rewardText.setText(
+            starAwarded ? `🪙 +${coinAwarded}    ⭐ +1` : `🪙 +${coinAwarded}`
+        ).setAlpha(0).setScale(0.6);
+
         this._openModal(this.winModal.container);
+        this.time.delayedCall(280, () => {
+            this.tweens.add({
+                targets: this.winModal.rewardText, alpha: 1, scale: 1,
+                duration: 350, ease: 'Back.easeOut',
+            });
+        });
         // Stagger star pop-in after modal lands
         this._winStars.forEach((s, i) => {
             this.time.delayedCall(320 + i * 160, () => {

@@ -84,32 +84,33 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         // ── Toy car (idle bounce) + Customize pencil ──────────────
         this._buildHomeCar(cx, 312);
 
-        // ── Level card ───────────────────────────────────────────
+        // ── Level card (tap to open Level Select) ─────────────────
         const savedLevel = Math.min(
             parseInt(localStorage.getItem('bbf_currentLevel') || '0'), LEVELS.length - 1
         );
         this._savedLevel = savedLevel;
-        const levelData = LEVELS[savedLevel] || LEVELS[0];
-        const DIFF_COL  = { Tutorial: 0x27AE60, Easy: 0x2980B9, Normal: 0xF39C12, Hard: 0xC0392B, 'Super Hard': 0x8E44AD };
-        const DIFF_HEX  = { Tutorial: '#2ECC71', Easy: '#3498DB', Normal: '#F1C40F', Hard: '#E74C3C', 'Super Hard': '#9B59B6' };
-        const dColor = DIFF_COL[levelData.difficulty] || 0x555577;
-        const dHex   = DIFF_HEX[levelData.difficulty] || '#AAAACC';
+        this._DIFF_COL = { Tutorial: 0x27AE60, Easy: 0x2980B9, Normal: 0xF39C12, Hard: 0xC0392B, 'Super Hard': 0x8E44AD };
+        this._DIFF_HEX = { Tutorial: '#2ECC71', Easy: '#3498DB', Normal: '#F1C40F', Hard: '#E74C3C', 'Super Hard': '#9B59B6' };
 
-        const cardY = 482, cardW = 300, cardH = 92, cL = cx - cardW / 2;
-        const card = this.add.graphics().setAlpha(0);
-        card.fillStyle(0x1C1C30, 1); card.fillRoundedRect(cL, cardY - cardH / 2, cardW, cardH, 14);
-        card.lineStyle(2, dColor, 0.7); card.strokeRoundedRect(cL, cardY - cardH / 2, cardW, cardH, 14);
-        card.fillStyle(dColor, 1); card.fillRoundedRect(cL, cardY - cardH / 2, 6, cardH, { tl: 14, tr: 0, bl: 14, br: 0 });
-
-        const lvlTxt  = this.add.text(cx + 3, cardY - 20, `Level ${levelData.id}`, {
+        this._cardY = 482; this._cardW = 300; this._cardH = 92; this._cardL = cx - this._cardW / 2;
+        this._cardGfx = this.add.graphics().setAlpha(0);
+        this._lvlTxt  = this.add.text(cx + 3, this._cardY - 20, '', {
             fontFamily: 'Outfit', fontSize: '22px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2 }).setOrigin(0.5).setAlpha(0);
-        const diffTxt = this.add.text(cx + 3, cardY + 6, levelData.difficulty, {
-            fontFamily: 'Outfit', fontSize: '13px', fontStyle: 'bold', color: dHex, resolution: 2 }).setOrigin(0.5).setAlpha(0);
-        const starTxt = this.add.text(cx + 3, cardY + 30, '☆  ☆  ☆', {
+        this._diffTxt = this.add.text(cx + 3, this._cardY + 6, '', {
+            fontFamily: 'Outfit', fontSize: '13px', fontStyle: 'bold', resolution: 2 }).setOrigin(0.5).setAlpha(0);
+        this._starTxt = this.add.text(cx + 3, this._cardY + 30, '☆  ☆  ☆', {
             fontFamily: 'Outfit', fontSize: '17px', color: '#2A2A48', resolution: 2 }).setOrigin(0.5).setAlpha(0);
-        [card, lvlTxt, diffTxt, starTxt].forEach((o, i) =>
+        const cardHint = this.add.text(this._cardL + this._cardW - 14, this._cardY - this._cardH / 2 + 12, '▾ Chọn Level', {
+            fontFamily: 'Outfit', fontSize: '10px', color: '#6666AA', resolution: 2,
+        }).setOrigin(1, 0).setAlpha(0);
+        this._refreshLevelCard();
+        [this._cardGfx, this._lvlTxt, this._diffTxt, this._starTxt, cardHint].forEach((o, i) =>
             this.tweens.add({ targets: o, alpha: 1, duration: 380, delay: 280 + i * 70, ease: 'Quad.easeOut' })
         );
+
+        const cardZone = this.add.zone(cx, this._cardY, this._cardW, this._cardH).setInteractive({ useHandCursor: true });
+        cardZone.on('pointerdown', () => { window.SoundMgr?.buttonClick(); this._openLevelSelectModal(); });
+        this._buildLevelSelectModal(W, H, cx);
 
         // ── PLAY (main) + UNLOCK (secondary) row ──────────────────
         const ctaY = 608, playW = 196, unlockW = 92, ctaH = 64, ctaGap = 10;
@@ -140,7 +141,12 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
                 onComplete: () => {
                     this.cameras.main.fadeOut(350, 0, 0, 0);
                     this.cameras.main.once('camerafadeoutcomplete', () =>
-                        this.scene.start('GameScene', { levelIndex: savedLevel })
+                        this.scene.start('LoadingScene', {
+                            next: 'GameScene',
+                            nextData: { levelIndex: this._savedLevel },
+                            totalMs: 1000,
+                            sub: 'Đang chuẩn bị màn chơi…',
+                        })
                     );
                 },
             });
@@ -197,9 +203,23 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         this._pAvatar = si('bbf_avatar', 0);
         this._pFrame  = si('bbf_frame',  0);
         this._hearts  = window.PlayerHearts ? window.PlayerHearts.tickRegen() : si('bbf_hearts', 5);
-        this._coins   = si('bbf_coins',  0);
-        this._stars   = si('bbf_stars',  0);
+        this._coins   = si('bbf_coins',  99999);
+        this._stars   = si('bbf_stars',  9999);
         this._region  = Math.max(1, Math.min(REGIONS.length, si('bbf_unlockedRegion', 1)));
+
+        // Debug helper: ?setCoins=N / ?setStars=N in the URL force-overwrites the saved
+        // balance once, then saves it — handy for testing without opening DevTools.
+        try {
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('setCoins')) {
+                const v = parseInt(params.get('setCoins'), 10);
+                if (!isNaN(v)) { this._coins = v; localStorage.setItem('bbf_coins', String(v)); }
+            }
+            if (params.has('setStars')) {
+                const v = parseInt(params.get('setStars'), 10);
+                if (!isNaN(v)) { this._stars = v; localStorage.setItem('bbf_stars', String(v)); }
+            }
+        } catch {}
 
         this._equippedParts = sj('bbf_carParts', { ...CAR_PARTS_DEFAULT });
         this._ownedParts = sj('bbf_ownedParts', {
@@ -221,6 +241,35 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
     _saveOwnedParts() { try { localStorage.setItem('bbf_ownedParts', JSON.stringify(this._ownedParts)); } catch {} }
     _saveOwnedCars() { try { localStorage.setItem('bbf_ownedCars', JSON.stringify(this._ownedCars)); } catch {} }
     _saveActiveCar() { try { localStorage.setItem('bbf_activeCar', this._activeCar); } catch {} }
+
+    /** How many distinct levels the player has ever fully cleared (anti-farm Star ledger doubles as the unlock gate). */
+    _completedLevelCount() {
+        try {
+            const parsed = JSON.parse(localStorage.getItem('bbf_completedLevels'));
+            return Array.isArray(parsed) ? parsed.length : 0;
+        } catch { return 0; }
+    }
+
+    /** Furthest level index the player is allowed to select/play (one past the last cleared level, capped). */
+    _highestUnlockedLevelIndex() {
+        return Math.min(this._completedLevelCount(), LEVELS.length - 1);
+    }
+
+    /** Redraws the Level card to reflect this._savedLevel (called on create + after Level Select). */
+    _refreshLevelCard() {
+        const levelData = LEVELS[this._savedLevel] || LEVELS[0];
+        const dColor = this._DIFF_COL[levelData.difficulty] || 0x555577;
+        const dHex   = this._DIFF_HEX[levelData.difficulty] || '#AAAACC';
+        const { _cardL: cL, _cardY: cardY, _cardW: cardW, _cardH: cardH } = this;
+
+        this._cardGfx.clear();
+        this._cardGfx.fillStyle(0x1C1C30, 1); this._cardGfx.fillRoundedRect(cL, cardY - cardH / 2, cardW, cardH, 14);
+        this._cardGfx.lineStyle(2, dColor, 0.7); this._cardGfx.strokeRoundedRect(cL, cardY - cardH / 2, cardW, cardH, 14);
+        this._cardGfx.fillStyle(dColor, 1); this._cardGfx.fillRoundedRect(cL, cardY - cardH / 2, 6, cardH, { tl: 14, tr: 0, bl: 14, br: 0 });
+
+        this._lvlTxt.setText(`Level ${levelData.id}`);
+        this._diffTxt.setText(levelData.difficulty).setColor(dHex);
+    }
 
     /** Generic press-feedback helper (alpha flash + scale), mirrors UIScene._addBtnPress. */
     _addPress(zone, targets) {
@@ -354,6 +403,21 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         }).setOrigin(0, 0.5);
         hud.add(this._starsText);
 
+        // Debug: tap the Star pill to type in a custom value (no DevTools needed).
+        const sZone = this.add.zone(spX + pW / 2, HY, pW, pH).setInteractive({ useHandCursor: true });
+        hud.add(sZone);
+        sZone.on('pointerdown', () => {
+            const input = window.prompt('Nhập số Star mới:', String(this._stars));
+            if (input === null) return;
+            const v = parseInt(input, 10);
+            if (!isNaN(v) && v >= 0) {
+                this._stars = v;
+                this._saveStars();
+                this._starsText.setText(`${this._stars}`);
+                this._refreshRegionTrail?.();
+            }
+        });
+
         // ── Coin pill ─────────────────────────────────────────
         const cGfx = this.add.graphics();
         cGfx.fillStyle(0x1A150A, 1); cGfx.fillRoundedRect(cpX, pillTop, pW, pH, pR);
@@ -364,6 +428,20 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
             fontFamily: 'Outfit', fontSize: '14px', fontStyle: 'bold', color: '#F1C40F', resolution: 2,
         }).setOrigin(0, 0.5);
         hud.add(this._coinsText);
+
+        // Debug: tap the Coin pill to type in a custom value (no DevTools needed).
+        const cZone = this.add.zone(cpX + pW / 2, HY, pW, pH).setInteractive({ useHandCursor: true });
+        hud.add(cZone);
+        cZone.on('pointerdown', () => {
+            const input = window.prompt('Nhập số Coin mới:', String(this._coins));
+            if (input === null) return;
+            const v = parseInt(input, 10);
+            if (!isNaN(v) && v >= 0) {
+                this._coins = v;
+                this._saveCoins();
+                this._coinsText.setText(`${this._coins}`);
+            }
+        });
 
         this.tweens.add({ targets: hud, alpha: 1, duration: 400, delay: 200 });
 
@@ -1081,6 +1159,126 @@ window.HomeScene = class HomeScene extends Phaser.Scene {
         this.tweens.add({
             targets: c, alpha: 0, y: 16, duration: 180, ease: 'Quad.easeIn',
             onComplete: () => c.setVisible(false).setY(0),
+        });
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Level Select (tap the Level card on Home)
+    // ──────────────────────────────────────────────────────────
+    _buildLevelSelectModal(W, H, cx) {
+        const cols = 4, cellW = 64, cellH = 64, gap = 10;
+        const rows = Math.ceil(LEVELS.length / cols);
+        const gridW = cols * cellW + (cols - 1) * gap;
+        const headerH = 76;
+        const mW = gridW + 34;
+        const mH = headerH + rows * cellH + (rows - 1) * gap + 20;
+        const mX = cx - mW / 2;
+        const mY = Math.round(H / 2 - mH / 2);
+        const gridX = cx - gridW / 2;
+        const gridTop = mY + headerH;
+        this._lsX = mX; this._lsW = mW; this._lsGridX = gridX; this._lsGridTop = gridTop;
+        this._lsCols = cols; this._lsCellW = cellW; this._lsCellH = cellH; this._lsGap = gap;
+
+        const c = this.add.container(0, 0).setDepth(85).setVisible(false);
+        this._lsContainer = c;
+
+        const dim = this.add.graphics();
+        dim.fillStyle(0x000000, 0.75); dim.fillRect(0, 0, W, H);
+        const dimZone = this.add.zone(cx, H / 2, W, H).setInteractive();
+        dimZone.on('pointerdown', () => this._closeLevelSelectModal());
+        c.add(dim); c.add(dimZone);
+
+        const blocker = this.add.zone(cx, mY + mH / 2, mW, mH).setInteractive();
+        c.add(blocker);
+
+        const panel = this.add.graphics();
+        panel.fillStyle(0x16162A, 1); panel.fillRoundedRect(mX, mY, mW, mH, 20);
+        panel.fillStyle(0x7B6CF6, 1); panel.fillRoundedRect(mX, mY, mW, 52, { tl: 20, tr: 20, bl: 0, br: 0 });
+        panel.lineStyle(1.5, 0x4B3CCF, 0.6); panel.strokeRoundedRect(mX, mY, mW, mH, 20);
+        c.add(panel);
+
+        c.add(this.add.text(cx, mY + 26, '🗂  CHỌN LEVEL', {
+            fontFamily: 'Outfit', fontSize: '15px', fontStyle: 'bold', color: '#FFFFFF', resolution: 2,
+        }).setOrigin(0.5));
+
+        const closeX = mX + mW - 28, closeY = mY + 26;
+        c.add(this.add.text(closeX, closeY, '✕', {
+            fontFamily: 'Outfit', fontSize: '18px', color: '#FFFFFF', resolution: 2,
+        }).setOrigin(0.5));
+        const closeZone = this.add.zone(closeX, closeY, 44, 44).setInteractive({ useHandCursor: true });
+        c.add(closeZone);
+        closeZone.on('pointerdown', () => this._closeLevelSelectModal());
+
+        this._lsSubText = this.add.text(cx, mY + 64, '', {
+            fontFamily: 'Outfit', fontSize: '11px', color: '#9999BB', resolution: 2,
+        }).setOrigin(0.5);
+        c.add(this._lsSubText);
+
+        this._lsContent = this.add.container(0, 0);
+        c.add(this._lsContent);
+    }
+
+    _renderLevelSelectGrid() {
+        const content = this._lsContent;
+        content.removeAll(true);
+        const { _lsGridX: gridX, _lsGridTop: gridTop, _lsCols: cols, _lsCellW: cellW, _lsCellH: cellH, _lsGap: gap } = this;
+        const highestUnlocked = this._highestUnlockedLevelIndex();
+        const completedCount = this._completedLevelCount();
+
+        this._lsSubText?.setText(`${completedCount}/${LEVELS.length} màn đã hoàn thành`);
+
+        LEVELS.forEach((levelData, idx) => {
+            const col = idx % cols, row = Math.floor(idx / cols);
+            const x = gridX + col * (cellW + gap) + cellW / 2;
+            const y = gridTop + row * (cellH + gap) + cellH / 2;
+            const unlocked = idx <= highestUnlocked;
+            const isCurrent = idx === this._savedLevel;
+            const dColor = this._DIFF_COL[levelData.difficulty] || 0x555577;
+
+            const cellBg = this.add.graphics();
+            cellBg.fillStyle(unlocked ? 0x1C1C30 : 0x15151F, 1);
+            cellBg.fillRoundedRect(x - cellW / 2, y - cellH / 2, cellW, cellH, 12);
+            cellBg.lineStyle(isCurrent ? 3 : 1.5, unlocked ? dColor : 0x33334A, unlocked ? 1 : 0.6);
+            cellBg.strokeRoundedRect(x - cellW / 2, y - cellH / 2, cellW, cellH, 12);
+            content.add(cellBg);
+
+            content.add(this.add.text(x, y - 8, unlocked ? `${levelData.id}` : '🔒', {
+                fontFamily: 'Outfit', fontSize: unlocked ? '18px' : '16px', fontStyle: 'bold',
+                color: unlocked ? '#FFFFFF' : '#555570', resolution: 2,
+            }).setOrigin(0.5));
+
+            if (unlocked) {
+                content.add(this.add.text(x, y + 16, idx < completedCount ? '⭐' : levelData.difficulty, {
+                    fontFamily: 'Outfit', fontSize: idx < completedCount ? '12px' : '8px',
+                    fontStyle: 'bold', color: idx < completedCount ? '#F1C40F' : '#8888AA', resolution: 2,
+                }).setOrigin(0.5));
+            }
+
+            const zone = this.add.zone(x, y, cellW, cellH).setInteractive({ useHandCursor: true });
+            content.add(zone);
+            zone.on('pointerdown', () => {
+                window.SoundMgr?.buttonClick();
+                if (!unlocked) { this._showToast('🔒 Hoàn thành level trước để mở khoá!'); return; }
+                this._savedLevel = idx;
+                try { localStorage.setItem('bbf_currentLevel', idx); } catch {}
+                this._refreshLevelCard();
+                this._closeLevelSelectModal();
+            });
+        });
+    }
+
+    _openLevelSelectModal() {
+        this._renderLevelSelectGrid();
+        const c = this._lsContainer;
+        c.setVisible(true).setAlpha(0).setY(22);
+        this.tweens.add({ targets: c, alpha: 1, y: 0, duration: 300, ease: 'Back.easeOut' });
+    }
+
+    _closeLevelSelectModal() {
+        const c = this._lsContainer;
+        this.tweens.add({
+            targets: c, alpha: 0, y: 16, duration: 180, ease: 'Quad.easeIn',
+            onComplete: () => c.setVisible(false),
         });
     }
 

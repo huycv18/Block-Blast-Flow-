@@ -5,6 +5,15 @@
 window.LoadingScene = class LoadingScene extends Phaser.Scene {
     constructor() { super('LoadingScene'); }
 
+    /** data: { next, nextData, totalMs, sub } — lets any scene route through this Loading
+     *  screen before continuing (e.g. Home → GameScene on PLAY), not just the boot splash. */
+    init(data) {
+        this._next = (data && data.next) || 'HomeScene';
+        this._nextData = (data && data.nextData) || undefined;
+        this._totalMs = (data && data.totalMs) || 1800;
+        this._subLabel = (data && data.sub) || 'A satisfying puzzle experience';
+    }
+
     create() {
         const W = CONFIG.GAME_WIDTH, H = CONFIG.GAME_HEIGHT, cx = W / 2, cy = H / 2;
 
@@ -59,7 +68,7 @@ window.LoadingScene = class LoadingScene extends Phaser.Scene {
         this.time.delayedCall(800, () => this._spawnSparkles(cx, carCy));
 
         // Sub-label
-        const sub = this.add.text(cx, cy + 70, 'A satisfying puzzle experience', {
+        const sub = this.add.text(cx, cy + 70, this._subLabel, {
             fontFamily: 'Outfit', fontSize: '14px', color: '#6666AA', resolution: 2,
         }).setOrigin(0.5).setAlpha(0);
         this.tweens.add({ targets: sub, alpha: 1, duration: 600, delay: 500, ease: 'Quad.easeOut' });
@@ -86,8 +95,8 @@ window.LoadingScene = class LoadingScene extends Phaser.Scene {
         }).setOrigin(0.5).setAlpha(0);
         this.tweens.add({ targets: loadTxt, alpha: 1, delay: 400, duration: 300 });
 
-        // Drive progress value over ~1.8 s, then fade out
-        const TOTAL_MS = 1800;
+        // Drive progress value, then fade out into the next scene
+        const TOTAL_MS = this._totalMs;
         const start = this.time.now;
         this._tick = () => {
             const t = Math.min(1, (this.time.now - start) / TOTAL_MS);
@@ -98,9 +107,9 @@ window.LoadingScene = class LoadingScene extends Phaser.Scene {
             if (fw > 0) barFill.fillRoundedRect(barX, barY, fw, barH, 4);
         };
 
-        this.time.delayedCall(TOTAL_MS + 500, () => {
-            this.cameras.main.fadeOut(450, 0, 0, 0);
-            this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('HomeScene'));
+        this.time.delayedCall(TOTAL_MS + 400, () => {
+            this.cameras.main.fadeOut(400, 0, 0, 0);
+            this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(this._next, this._nextData));
         });
     }
 
